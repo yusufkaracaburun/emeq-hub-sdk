@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Emeq\HubSdk\Facades;
+
+use Emeq\HubSdk\Hub as HubManager;
+use Emeq\HubSdk\Http\HubConnector;
+use Emeq\HubSdk\Resources\Accounting;
+use Emeq\HubSdk\Resources\Accounts;
+use Emeq\HubSdk\Resources\Connections;
+use Emeq\HubSdk\Resources\Integrations;
+use Emeq\HubSdk\Resources\OAuth;
+use Illuminate\Support\Facades\Facade;
+
+/**
+ * @method static HubConnector connector()
+ * @method static Accounts accounts()
+ * @method static Integrations integrations()
+ * @method static OAuth oauth()
+ * @method static Connections connections()
+ * @method static Accounting accounting()
+ *
+ * @see HubManager
+ */
+class Hub extends Facade
+{
+    protected static function getFacadeAccessor(): string
+    {
+        return HubManager::class;
+    }
+}
