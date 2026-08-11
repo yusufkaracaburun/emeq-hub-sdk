@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0] — 2026-08-11
+
+### Added
+
+- Opt-in integration BFF routes (`EMEQ_HUB_ROUTES`): list / connect / destroy
+- `ResolvesAccountDisplayName` contract for Hub account `display_name` on connect
+- Config: `hub.routes.*`, `hub.oauth.return_path`
+
+### Security / hardening
+
+- `EMEQ_HUB_ROUTES` defaults to **false** (explicit opt-in)
+- Refuse empty `hub.routes.middleware` (no unauthenticated BFF)
+- Unbound `ResolvesAccountId` → JSON `503 missing_account_resolver`
+- Validate `hub.oauth.return_path` (relative `/…` only; reject scheme / `//`)
+- Always log Hub BFF errors; destroy only tenant-owned connections
+
 ## [0.1.0] — 2026-08-11
 
 ### Added

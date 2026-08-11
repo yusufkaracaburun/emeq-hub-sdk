@@ -6,6 +6,9 @@ namespace Emeq\HubSdk;
 
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Http\HubConnector;
+use Emeq\HubSdk\Support\HubRouteMiddleware;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\Route;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -21,7 +24,7 @@ class HubServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(HubConnector::class, function ($app): HubConnector {
-            /** @var \Illuminate\Contracts\Config\Repository $config */
+            /** @var Repository $config */
             $config = $app->make('config');
 
             return new HubConnector(
@@ -38,6 +41,20 @@ class HubServiceProvider extends PackageServiceProvider
                     ? $app->make(ResolvesAccountId::class)
                     : null,
             );
+        });
+    }
+
+    public function packageBooted(): void
+    {
+        if (! (bool) config('hub.routes.enabled', false)) {
+            return;
+        }
+
+        $middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
+        HubRouteMiddleware::assertNotEmpty($middleware);
+
+        Route::group([], function (): void {
+            $this->loadRoutesFrom(__DIR__.'/../routes/integrations.php');
         });
     }
 }

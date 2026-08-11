@@ -21,5 +21,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('hub.base_url', 'https://hub.example.test');
         $app['config']->set('hub.pat', 'test-pat-token');
         $app['config']->set('hub.timeout', 10);
+        // Opt-in BFF routes off by default in unit tests; enable in RoutesEnabledTestCase.
+        $app['config']->set('hub.routes.enabled', false);
     }
 }

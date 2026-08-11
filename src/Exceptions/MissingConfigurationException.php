@@ -12,6 +12,7 @@ class MissingConfigurationException extends HubException
             'hub.base_url / EMEQ_HUB_BASE is not configured.',
             error: 'missing_configuration',
             category: 'CONFIGURATION_ERROR',
+            status: 503,
         );
     }
 
@@ -21,6 +22,17 @@ class MissingConfigurationException extends HubException
             'hub.pat / EMEQ_HUB_PAT is not configured.',
             error: 'missing_configuration',
             category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
+    public static function missingAccountResolver(): self
+    {
+        return new self(
+            'Bind Emeq\\HubSdk\\Contracts\\ResolvesAccountId before using Hub integration routes.',
+            error: 'missing_account_resolver',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
         );
     }
 }

@@ -15,12 +15,19 @@ sites.
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.1
+composer require emeq/hub-sdk:^0.2
 ```
 
 ```env
 EMEQ_HUB_BASE=https://hub.emeq.nl
 EMEQ_HUB_PAT=your-sanctum-pat
+EMEQ_HUB_TIMEOUT=30
+# Opt-in BFF routes (default off) — enable + tune middleware to your guard
+EMEQ_HUB_ROUTES=true
+EMEQ_HUB_ROUTES_PREFIX=api
+EMEQ_HUB_ROUTES_MIDDLEWARE=api,auth:sanctum
+# Relative path on YOUR host only (no https://…). Empty = omit return_url.
+EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 ```
 
 Publish config (optional):
@@ -29,23 +36,41 @@ Publish config (optional):
 php artisan vendor:publish --tag=hub-config
 ```
 
+The package registers three auth-protected routes when `EMEQ_HUB_ROUTES=true`
+(default `false`). Middleware must be non-empty — empty middleware refuses to boot.
+
+| Method | Path | Action |
+|---|---|---|
+| `GET` | `/{prefix}/integrations` | list providers + status |
+| `POST` | `/{prefix}/integrations/{provider}/connect` | ensure account + OAuth init |
+| `DELETE` | `/{prefix}/integrations/{connection}` | revoke (tenant-owned only) |
+
+Set `EMEQ_HUB_OAUTH_RETURN_PATH` to a path on **your** host (or leave empty to let Hub use the request Origin). The SDK never assumes an app-specific URL.
+
 ## Account binding
 
 Bind your tenant → Hub `external_id` server-side:
 
 ```php
+use Emeq\HubSdk\Contracts\ResolvesAccountDisplayName;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 
-class HubAccountIdResolver implements ResolvesAccountId
+class HubAccountIdResolver implements ResolvesAccountId, ResolvesAccountDisplayName
 {
     public function accountId(): string
     {
         return (string) current_tenant_id(); // your app
     }
+
+    public function displayName(): ?string
+    {
+        return current_tenant_name(); // optional; null is fine
+    }
 }
 
 // AppServiceProvider
 $this->app->bind(ResolvesAccountId::class, HubAccountIdResolver::class);
+$this->app->bind(ResolvesAccountDisplayName::class, HubAccountIdResolver::class);
 ```
 
 ## Usage
@@ -124,8 +149,9 @@ Paste the prompt below into your coding agent (Cursor, Claude Code, …) to
 install and configure `emeq/hub-sdk` against your tenant model. Fill in the
 `{…}` placeholders before pasting.
 
-The prompt covers **install + config + account binding + thin backend routes**.
-UI cards / privacy checkbox belong in your app; build those next with the Hub
+The prompt covers **install + config + account binding**. Integration BFF routes
+ship with the package (`EMEQ_HUB_ROUTES`). UI cards / privacy checkbox belong in
+your app; build those next with the Hub
 [consumer-integration-guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md)
 agent prompts.
 
@@ -138,6 +164,8 @@ CONTEXT
 - App: {Laravel 13 / path to repo}
 - Hub base URL: {https://hub.emeq.nl}
 - PAT from env (empty or known): EMEQ_HUB_PAT
+- Auth middleware for Hub routes: {api,auth:sanctum / api,auth:api / …}
+- OAuth return path on my host: {/settings/integrations?oauth=1 — or empty}
 - Tenants are distinguished by: {subdomain / instance.id / company_id / …
   — describe how you resolve the current tenant}
 - Hub account `external_id` = {stable internal tenant id, e.g. instance.id —
@@ -146,43 +174,43 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.1
+   composer require emeq/hub-sdk:^0.2
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
-   (optional) EMEQ_HUB_TIMEOUT=30
+   EMEQ_HUB_TIMEOUT=30
+   EMEQ_HUB_ROUTES=true
+   EMEQ_HUB_ROUTES_PREFIX=api
+   EMEQ_HUB_ROUTES_MIDDLEWARE={api,auth:sanctum}
+   EMEQ_HUB_OAUTH_RETURN_PATH={/settings/integrations?oauth=1}
 3. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
    (e.g. `App\Integrations\Hub\HubAccountIdResolver`) mapping the current
    tenant to Hub `external_id` per CONTEXT above — server-side only.
+   Optionally also implement `ResolvesAccountDisplayName` for Hub account names.
 4. Bind that class in `AppServiceProvider::register()` to
-   `ResolvesAccountId::class`.
-5. Build thin, existing-auth-protected routes/controllers that talk ONLY via
-   `Emeq\HubSdk\Facades\Hub` — no custom Http::withToken / Guzzle / Saloon
-   connector to the Hub:
-   - GET  …/integrations → Hub::integrations()->list()
-   - POST …/integrations/{provider}/connect → Hub::accounts()->create(...)
-     (treat 409 as already exists) + Hub::oauth()->init($provider, returnUrl: …)
-     then redirect to redirect_url. Build return_url SERVER-SIDE from the
-     request host; never from the client body. $provider is the Hub key
-     (string) — no enum/allowlist in my code.
-   - DELETE …/integrations/{connection} → Hub::connections()->delete($id)
-     after verifying the connection belongs to the current tenant.
+   `ResolvesAccountId::class` (and `ResolvesAccountDisplayName::class` if used).
+5. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
+   must be non-empty. Do NOT hand-roll Hub HTTP clients or duplicate the
+   package BFF routes. Use `Hub` facade only for extra Hub calls beyond the
+   shipped routes.
 6. Do not store tokens, connection state, or provider credentials in my DB.
-   Status comes live from Hub::integrations()->list().
+   Status comes live from Hub::integrations()->list() / GET …/integrations.
 7. Data-driven: hardcoded provider lists or `if ($provider === 'exact')` are
    forbidden. New Hub partners must work without code changes.
-8. Errors: rethrow HubException subclasses or map them to clean HTTP
-   responses; log `requestId` when set.
+8. Errors: HubException subclasses map to JSON on the BFF routes; when calling
+   Hub yourself, rethrow or map and log `requestId` when set.
 
 DO NOT
 - Browser / direct calls to the Hub (PAT stays server-side)
 - Install emeq/exact-api or other partner SDKs in this consumer app
 - Build per-partner pass-through wrappers
 - Take X-Account-Id / account_external_id from the client request
+- Re-implement GET/POST/DELETE …/integrations in my app (SDK owns those)
 
 DONE WHEN
 - composer show emeq/hub-sdk works
 - ResolvesAccountId is bound
+- Package routes respond under my auth middleware
 - At least one feature/smoke test: list integrations (MockClient or Http fake)
   proves account id is derived server-side and ignores a spoofed request header
 ```
