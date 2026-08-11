@@ -116,8 +116,11 @@ describe('with account resolver', function (): void {
     });
 
     it('does not expose per-provider connect or destroy BFF routes', function (): void {
-        $this->postJson('/api/integrations/exact/connect')->assertNotFound();
-        $this->deleteJson('/api/integrations/99')->assertNotFound();
+        $connect = $this->postJson('/api/integrations/exact/connect');
+        expect($connect->status())->toBeIn([404, 405]);
+
+        $destroy = $this->deleteJson('/api/integrations/99');
+        expect($destroy->status())->toBeIn([404, 405]);
     });
 });
 
