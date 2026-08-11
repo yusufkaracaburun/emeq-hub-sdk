@@ -7,8 +7,9 @@ Laravel 13 consumer client for the emeq Hub `/v1` API (Saloon v4).
 SDK release. Partner wire stays in the Hub + `emeq/*-api` packages — this SDK
 does **not** expose per-partner pass-through.
 
-Payload shapes, OAuth UX, webhooks and OpenAPI live in the Hub docs — see
-[Further reading](#further-reading). This README is package install + call site.
+Payload shapes, OAuth UX, webhooks, and OpenAPI live in the Hub docs — see
+[Further reading](#further-reading). This README covers package install and call
+sites.
 
 ## Install
 
@@ -117,74 +118,73 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).
 - **Idempotency** — `createDocument` requires a stable `idempotencyKey` per logical write.
 
-## AI prompt — SDK in je Laravel-app
+## AI prompt — wire this SDK into your Laravel app
 
-Plak onderstaande prompt in je coding-agent (Cursor, Claude Code, …) om
-`emeq/hub-sdk` te installeren, te configureren en aan te sluiten op jouw
-tenant-model. Vul de `{…}`-placeholders in vóór je plakt.
+Paste the prompt below into your coding agent (Cursor, Claude Code, …) to
+install and configure `emeq/hub-sdk` against your tenant model. Fill in the
+`{…}` placeholders before pasting.
 
-De prompt dekt **install + config + account-binding + dunne backend-routes**.
-UI/kaarten/privacy-checkbox horen bij je app; die kun je daarna laten bouwen
-met de agent-prompts in de Hub
-[consumer-integration-guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md).
+The prompt covers **install + config + account binding + thin backend routes**.
+UI cards / privacy checkbox belong in your app; build those next with the Hub
+[consumer-integration-guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md)
+agent prompts.
 
 ```text
-Installeer en configureer emeq/hub-sdk in mijn Laravel-app zodat we de emeq Hub
-(/v1) server-side kunnen aanroepen. Lees eerst de package-README:
+Install and configure emeq/hub-sdk in my Laravel app so we can call the emeq Hub
+(/v1) server-side. Read the package README first:
 https://github.com/yusufkaracaburun/emeq-hub-sdk
 
 CONTEXT
-- App: {Laravel 13 / pad naar repo}
-- Hub base-URL: {https://hub.emeq.nl}
-- PAT komt uit env (nog leeg of al bekend): EMEQ_HUB_PAT
-- Mijn tenants worden onderscheiden door: {subdomein / instance.id /
-  company_id / … — beschrijf hoe je de huidige tenant resolvet}
-- Hub account `external_id` = {stabiele interne tenant-id, bv. instance.id —
-  geen e-mail of domein}
+- App: {Laravel 13 / path to repo}
+- Hub base URL: {https://hub.emeq.nl}
+- PAT from env (empty or known): EMEQ_HUB_PAT
+- Tenants are distinguished by: {subdomain / instance.id / company_id / …
+  — describe how you resolve the current tenant}
+- Hub account `external_id` = {stable internal tenant id, e.g. instance.id —
+  not email or domain}
 
-DOE DIT (in deze volgorde)
-1. Composer VCS-repo toevoegen en require:
+DO THIS (in order)
+1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
    composer require emeq/hub-sdk:^0.1
-2. Zet in `.env` / `.env.example`:
+2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
-   (optioneel) EMEQ_HUB_TIMEOUT=30
-3. Implementeer `Emeq\HubSdk\Contracts\ResolvesAccountId` in mijn app
-   (bijv. `App\Integrations\Hub\HubAccountIdResolver`) die server-side de
-   huidige tenant naar Hub `external_id` mapt volgens CONTEXT hierboven.
-4. Bind die class in `AppServiceProvider::register()` aan
+   (optional) EMEQ_HUB_TIMEOUT=30
+3. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
+   (e.g. `App\Integrations\Hub\HubAccountIdResolver`) mapping the current
+   tenant to Hub `external_id` per CONTEXT above — server-side only.
+4. Bind that class in `AppServiceProvider::register()` to
    `ResolvesAccountId::class`.
-5. Bouw dunne, bestaande-auth-beschermde routes/controllers die ALLEEN via
-   `Emeq\HubSdk\Facades\Hub` praten — geen eigen Http::withToken / Guzzle /
-   Saloon-connector naar de Hub:
-   - GET  …/integrations          → Hub::integrations()->list()
+5. Build thin, existing-auth-protected routes/controllers that talk ONLY via
+   `Emeq\HubSdk\Facades\Hub` — no custom Http::withToken / Guzzle / Saloon
+   connector to the Hub:
+   - GET  …/integrations → Hub::integrations()->list()
    - POST …/integrations/{provider}/connect → Hub::accounts()->create(...)
-     (409/bestaat-al negeren) + Hub::oauth()->init($provider, returnUrl: …)
-     en redirect naar redirect_url. Bouw return_url SERVER-SIDE uit de
-     request-host; nooit uit de client-body. $provider is de Hub-key
-     (string) — geen enum/allowlist in mijn code.
+     (treat 409 as already exists) + Hub::oauth()->init($provider, returnUrl: …)
+     then redirect to redirect_url. Build return_url SERVER-SIDE from the
+     request host; never from the client body. $provider is the Hub key
+     (string) — no enum/allowlist in my code.
    - DELETE …/integrations/{connection} → Hub::connections()->delete($id)
-     na check dat de connection bij de huidige tenant hoort.
-6. Geen tokens, connection-state of provider-credentials in mijn DB. Status
-   komt live uit Hub::integrations()->list().
-7. Data-driven: hardcoded providerlijst of `if ($provider === 'exact')` is
-   verboden. Nieuwe Hub-partners moeten vanzelf werken.
-8. Fouten: laat HubException-subclasses door of map ze naar nette HTTP-
-   responses; log `requestId` als die gezet is.
+     after verifying the connection belongs to the current tenant.
+6. Do not store tokens, connection state, or provider credentials in my DB.
+   Status comes live from Hub::integrations()->list().
+7. Data-driven: hardcoded provider lists or `if ($provider === 'exact')` are
+   forbidden. New Hub partners must work without code changes.
+8. Errors: rethrow HubException subclasses or map them to clean HTTP
+   responses; log `requestId` when set.
 
-NIET DOEN
-- Browser/directe calls naar de Hub (PAT blijft server-side)
-- emeq/exact-api of andere partner-SDK’s in deze consumer-app installeren
-- Per-partner pass-through wrappers bouwen
-- X-Account-Id / account_external_id uit request van de client overnemen
+DO NOT
+- Browser / direct calls to the Hub (PAT stays server-side)
+- Install emeq/exact-api or other partner SDKs in this consumer app
+- Build per-partner pass-through wrappers
+- Take X-Account-Id / account_external_id from the client request
 
-KLAAR ALS
-- composer show emeq/hub-sdk werkt
-- ResolvesAccountId is gebonden
-- Minstens één feature-test of smoke: list integrations (MockClient of
-  Http fake) bewijst dat account-id server-side komt en niet uit een
-  gespoofde request-header
+DONE WHEN
+- composer show emeq/hub-sdk works
+- ResolvesAccountId is bound
+- At least one feature/smoke test: list integrations (MockClient or Http fake)
+  proves account id is derived server-side and ignores a spoofed request header
 ```
 
 ## Growth model
@@ -197,8 +197,8 @@ KLAAR ALS
 
 ## Further reading
 
-- [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub-admin + consumer invarianten (B1–B4)
-- [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent-prompts
+- [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub admin + consumer invariants (B1–B4)
+- [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent prompts
 - Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api`
 
 ## Requirements
