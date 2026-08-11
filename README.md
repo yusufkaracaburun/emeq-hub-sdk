@@ -7,6 +7,9 @@ Laravel 13 consumer client for the emeq Hub `/v1` API (Saloon v4).
 SDK release. Partner wire stays in the Hub + `emeq/*-api` packages — this SDK
 does **not** expose per-partner pass-through.
 
+Payload shapes, OAuth UX, webhooks and OpenAPI live in the Hub docs — see
+[Further reading](#further-reading). This README is package install + call site.
+
 ## Install
 
 ```bash
@@ -52,10 +55,67 @@ use Emeq\HubSdk\Facades\Hub;
 $providers = Hub::integrations()->list(); // data-driven
 $init = Hub::oauth()->init($providers[0]['key'], returnUrl: $url);
 
-Hub::accounts()->create('tenant-1', 'Acme B.V.');
-Hub::accounting()->createDocument($payload, idempotencyKey: $key);
+Hub::accounts()->create('tenant-1', 'Acme B.V.'); // treat 409 as "already exists"
 Hub::connections()->delete($connectionId);
+
+// Canonical accounting — Hub picks the partner adapter.
+// Idempotency-Key is required on create (passed as $idempotencyKey).
+Hub::accounting()->validateDocument($payload);
+Hub::accounting()->createDocument($payload, idempotencyKey: (string) Str::uuid());
+Hub::accounting()->capabilities();
 ```
+
+## API surface
+
+| SDK | Hub |
+|---|---|
+| `Hub::accounts()->create(...)` | `POST /v1/accounts` |
+| `Hub::integrations()->list(...)` | `GET /v1/integrations` |
+| `Hub::oauth()->init($provider, ...)` | `POST /v1/oauth/{provider}/init` |
+| `Hub::connections()->get($id)` | `GET /v1/connections/{id}` |
+| `Hub::connections()->delete($id)` | `DELETE /v1/connections/{id}` |
+| `Hub::accounting()->validateDocument(...)` | `POST /v1/accounting/documents/validate` |
+| `Hub::accounting()->createDocument(..., $idempotencyKey)` | `POST /v1/accounting/documents` |
+| `Hub::accounting()->documents(...)` | `GET /v1/accounting/documents` |
+| `Hub::accounting()->bankStatements(...)` | `GET /v1/accounting/bank-statements` |
+| `Hub::accounting()->ledgerAccounts(...)` | `GET /v1/accounting/ledger-accounts` |
+| `Hub::accounting()->taxCodes(...)` | `GET /v1/accounting/tax-codes` |
+| `Hub::accounting()->customers(...)` | `GET /v1/accounting/customers` |
+| `Hub::accounting()->suppliers(...)` | `GET /v1/accounting/suppliers` |
+| `Hub::accounting()->capabilities()` | `GET /v1/accounting/capabilities` |
+| `Hub::accounting()->referenceData()` | `GET /v1/accounting/reference-data` |
+| `Hub::accounting()->mapping()` / `updateMapping(...)` | `GET` / `PUT /v1/accounting/mapping` |
+| `Hub::accounting()->sync(...)` | `POST /v1/accounting/sync` |
+
+`$provider` is a free string (Hub discovery `key`) — no SDK allowlist.
+Account context uses `X-Account-Id` / `account_external_id` from
+`ResolvesAccountId` or an explicit argument.
+
+## Errors
+
+Failed Hub responses throw `Emeq\HubSdk\Exceptions\HubException` (or a subclass).
+Envelope fields map to public properties: `error`, `category`, `requestId`, `status`.
+
+| HTTP / category | Exception |
+|---|---|
+| 401 / `AUTHENTICATION_ERROR` | `AuthenticationException` |
+| 403 / `AUTHORIZATION_ERROR` | `AuthorizationException` |
+| 404 | `NotFoundException` |
+| 422 / `VALIDATION_ERROR` | `ValidationException` |
+| 429 | `RateLimitException` |
+| ≥ 500 | `ServerException` |
+| Missing `EMEQ_HUB_*` | `MissingConfigurationException` |
+
+Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_id`.
+
+## Pitfalls
+
+- **PAT in the browser** — always call Hub from your Laravel backend via this SDK.
+- **Account id from the client** — never trust `X-Account-Id` / `account_external_id` from the request; derive via `ResolvesAccountId`.
+- **Hardcoded providers** — render what `integrations()->list()` returns; no `if ($provider === 'exact')`.
+- **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
+- **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).
+- **Idempotency** — `createDocument` requires a stable `idempotencyKey` per logical write.
 
 ## AI prompt — SDK in je Laravel-app
 
@@ -134,6 +194,12 @@ KLAAR ALS
 | New partner | Hub only — SDK unchanged |
 | New canonical `/v1` endpoint | This SDK (+ tag) |
 | Partner HTTP/auth/DTOs | `emeq/<partner>-api` (Hub-internal) |
+
+## Further reading
+
+- [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub-admin + consumer invarianten (B1–B4)
+- [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent-prompts
+- Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api`
 
 ## Requirements
 

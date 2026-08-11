@@ -9,3 +9,4 @@
 - Typed Hub error envelope mapping
 - `ResolvesAccountId` contract for server-side tenant → Hub account binding
 - README AI prompt to install/configure the SDK in a Laravel consumer app
+- README: API surface map, error table, pitfalls, links to Hub consumer docs
