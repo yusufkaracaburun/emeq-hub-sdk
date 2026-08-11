@@ -8,3 +8,4 @@
 - Provider-agnostic resources: accounts, integrations, OAuth init, connections, accounting
 - Typed Hub error envelope mapping
 - `ResolvesAccountId` contract for server-side tenant → Hub account binding
+- README AI prompt to install/configure the SDK in a Laravel consumer app
