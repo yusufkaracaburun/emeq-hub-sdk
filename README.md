@@ -15,7 +15,7 @@ sites.
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.2
+composer require emeq/hub-sdk:^0.3
 ```
 
 ```env
@@ -36,17 +36,21 @@ Publish config (optional):
 php artisan vendor:publish --tag=hub-config
 ```
 
-The package registers three auth-protected routes when `EMEQ_HUB_ROUTES=true`
+The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
 (default `false`). Middleware must be non-empty — empty middleware refuses to boot.
 
 | Method | Path | Action |
 |---|---|---|
-| `GET` | `/{prefix}/integrations` | list providers + status |
-| `POST` | `/{prefix}/integrations/connect-session` | Hub hosted connect page URL |
-| `POST` | `/{prefix}/integrations/{provider}/connect` | ensure account + OAuth init |
-| `DELETE` | `/{prefix}/integrations/{connection}` | revoke (tenant-owned only) |
+| `GET` | `/{prefix}/integrations` | optional: list providers + status |
+| `POST` | `/{prefix}/integrations/connect-session` | mint Hub hosted `/connect` URL |
 
-Set `EMEQ_HUB_OAUTH_RETURN_PATH` to a path on **your** host (or leave empty to let Hub use the request Origin). The SDK never assumes an app-specific URL.
+**Recommended UX:** one button that `POST`s `connect-session` and redirects to
+`url`. Users manage every provider (connect / disconnect / status) on Hub —
+do not re-implement per-provider OAuth in your app. Use `Hub::oauth()` /
+`Hub::connections()` only for server-side automation.
+
+Set `EMEQ_HUB_OAUTH_RETURN_PATH` to a path on **your** host (or leave empty).
+The SDK never assumes an app-specific URL.
 
 ## Account binding
 
@@ -151,11 +155,10 @@ Paste the prompt below into your coding agent (Cursor, Claude Code, …) to
 install and configure `emeq/hub-sdk` against your tenant model. Fill in the
 `{…}` placeholders before pasting.
 
-The prompt covers **install + config + account binding**. Integration BFF routes
-ship with the package (`EMEQ_HUB_ROUTES`). UI cards / privacy checkbox belong in
-your app; build those next with the Hub
-[consumer-integration-guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md)
-agent prompts.
+The prompt covers **install + config + account binding + one Hub-portal CTA**.
+Integration BFF routes ship with the package (`EMEQ_HUB_ROUTES`). Do **not**
+build per-provider connect UI — Hub’s hosted `/connect` page is the single
+source of truth.
 
 ```text
 Install and configure emeq/hub-sdk in my Laravel app so we can call the emeq Hub
@@ -176,7 +179,7 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.2
+   composer require emeq/hub-sdk:^0.3
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
@@ -193,28 +196,29 @@ DO THIS (in order)
    `ResolvesAccountId::class` (and `ResolvesAccountDisplayName::class` if used).
 5. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
    must be non-empty. Do NOT hand-roll Hub HTTP clients or duplicate the
-   package BFF routes. Use `Hub` facade only for extra Hub calls beyond the
-   shipped routes.
-6. Do not store tokens, connection state, or provider credentials in my DB.
-   Status comes live from Hub::integrations()->list() / GET …/integrations.
-7. Data-driven: hardcoded provider lists or `if ($provider === 'exact')` are
-   forbidden. New Hub partners must work without code changes.
+   package BFF routes.
+6. UI: one “Manage integrations” button that POSTs
+   `/{prefix}/integrations/connect-session` and redirects to `response.url`.
+   Users connect/disconnect on Hub — do NOT build per-provider OAuth buttons
+   or revoke flows in my app.
+7. Optional: GET `/{prefix}/integrations` for a read-only status strip.
+   Do not store tokens, connection state, or provider credentials in my DB.
 8. Errors: HubException subclasses map to JSON on the BFF routes; when calling
    Hub yourself, rethrow or map and log `requestId` when set.
 
 DO NOT
 - Browser / direct calls to the Hub (PAT stays server-side)
 - Install emeq/exact-api or other partner SDKs in this consumer app
-- Build per-partner pass-through wrappers
+- Build per-partner pass-through wrappers or per-provider connect UI
 - Take X-Account-Id / account_external_id from the client request
-- Re-implement GET/POST/DELETE …/integrations in my app (SDK owns those)
+- Re-implement connect-session / list routes in my app (SDK owns those)
 
 DONE WHEN
 - composer show emeq/hub-sdk works
 - ResolvesAccountId is bound
 - Package routes respond under my auth middleware
-- At least one feature/smoke test: list integrations (MockClient or Http fake)
-  proves account id is derived server-side and ignores a spoofed request header
+- Feature/smoke test: connect-session (MockClient) proves account id is derived
+  server-side; optional list test ignores a spoofed request header
 ```
 
 ## Growth model

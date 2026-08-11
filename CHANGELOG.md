@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] — 2026-08-11
+
+### Changed
+
+- **BFF is Hub-portal-first.** Shipped routes are only:
+  - `GET …/integrations` (optional status list)
+  - `POST …/integrations/connect-session` (mint hosted `/connect` URL)
+- Removed BFF `POST …/integrations/{provider}/connect` and
+  `DELETE …/integrations/{connection}`. Connect / disconnect live on Hub’s
+  hosted page — one UI for every consumer. Programmatic
+  `Hub::oauth()->init()` / `Hub::connections()->delete()` remain on the facade.
+
+### Migration
+
+Replace in-app per-provider connect buttons with one CTA that
+`POST`s `…/integrations/connect-session` and redirects to `url`.
+
 ## [0.2.1] — 2026-08-11
 
 ### Added

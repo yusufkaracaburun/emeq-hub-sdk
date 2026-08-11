@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Route;
 | Enabled via hub.routes.enabled. Middleware and prefix are consumer-config.
 | Account context always comes from ResolvesAccountId — never the request.
 |
+| Connect / disconnect are not exposed here: mint a connect-session and send
+| the user to Hub's hosted /connect page (single source of truth).
+|
 */
 
 $prefix = trim((string) config('hub.routes.prefix', 'api'), '/');
@@ -27,8 +30,4 @@ Route::middleware($middleware)
             ->name('emeq-hub.integrations.index');
         Route::post('/integrations/connect-session', [IntegrationController::class, 'connectSession'])
             ->name('emeq-hub.integrations.connect-session');
-        Route::post('/integrations/{provider}/connect', [IntegrationController::class, 'connect'])
-            ->name('emeq-hub.integrations.connect');
-        Route::delete('/integrations/{connection}', [IntegrationController::class, 'destroy'])
-            ->name('emeq-hub.integrations.destroy');
     });
