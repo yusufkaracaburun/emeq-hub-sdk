@@ -25,6 +25,8 @@ Route::middleware($middleware)
     ->group(function (): void {
         Route::get('/integrations', [IntegrationController::class, 'index'])
             ->name('emeq-hub.integrations.index');
+        Route::post('/integrations/connect-session', [IntegrationController::class, 'connectSession'])
+            ->name('emeq-hub.integrations.connect-session');
         Route::post('/integrations/{provider}/connect', [IntegrationController::class, 'connect'])
             ->name('emeq-hub.integrations.connect');
         Route::delete('/integrations/{connection}', [IntegrationController::class, 'destroy'])

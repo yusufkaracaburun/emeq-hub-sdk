@@ -9,6 +9,7 @@ use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Resources\Accounting;
 use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
+use Emeq\HubSdk\Resources\ConnectSessions;
 use Emeq\HubSdk\Resources\Integrations;
 use Emeq\HubSdk\Resources\OAuth;
 
@@ -41,6 +42,11 @@ class Hub
     public function oauth(): OAuth
     {
         return new OAuth($this->connector, $this->accountIdResolver);
+    }
+
+    public function connectSessions(): ConnectSessions
+    {
+        return new ConnectSessions($this->connector, $this->accountIdResolver);
     }
 
     public function connections(): Connections

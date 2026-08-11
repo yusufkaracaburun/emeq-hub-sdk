@@ -42,6 +42,7 @@ The package registers three auth-protected routes when `EMEQ_HUB_ROUTES=true`
 | Method | Path | Action |
 |---|---|---|
 | `GET` | `/{prefix}/integrations` | list providers + status |
+| `POST` | `/{prefix}/integrations/connect-session` | Hub hosted connect page URL |
 | `POST` | `/{prefix}/integrations/{provider}/connect` | ensure account + OAuth init |
 | `DELETE` | `/{prefix}/integrations/{connection}` | revoke (tenant-owned only) |
 
@@ -97,6 +98,7 @@ Hub::accounting()->capabilities();
 |---|---|
 | `Hub::accounts()->create(...)` | `POST /v1/accounts` |
 | `Hub::integrations()->list(...)` | `GET /v1/integrations` |
+| `Hub::connectSessions()->create(...)` | `POST /v1/connect-sessions` |
 | `Hub::oauth()->init($provider, ...)` | `POST /v1/oauth/{provider}/init` |
 | `Hub::connections()->get($id)` | `GET /v1/connections/{id}` |
 | `Hub::connections()->delete($id)` | `DELETE /v1/connections/{id}` |

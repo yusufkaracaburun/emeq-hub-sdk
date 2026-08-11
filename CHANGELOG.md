@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1] — 2026-08-11
+
+### Added
+
+- `Hub::connectSessions()->create()` + BFF `POST …/integrations/connect-session`
+  (Hub hosted `/connect/{account}` handoff)
+
 ## [0.2.0] — 2026-08-11
 
 ### Added

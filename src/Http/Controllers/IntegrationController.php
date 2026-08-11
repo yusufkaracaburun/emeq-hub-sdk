@@ -96,6 +96,36 @@ class IntegrationController extends Controller
         }
     }
 
+    /**
+     * Mint Hub's hosted connect handoff page URL (option 2).
+     */
+    public function connectSession(Request $request): JsonResponse
+    {
+        try {
+            $externalId = $this->accountId();
+            $returnUrl = OAuthReturnUrl::fromConfigPath(
+                $request,
+                (string) config('hub.oauth.return_path', ''),
+            );
+            $displayName = app()->bound(ResolvesAccountDisplayName::class)
+                ? app(ResolvesAccountDisplayName::class)->displayName()
+                : null;
+
+            $session = Hub::connectSessions()->create(
+                accountExternalId: $externalId,
+                displayName: $displayName,
+                returnUrl: $returnUrl,
+            );
+
+            return response()->json([
+                'url' => $session['url'] ?? null,
+                'expires_at' => $session['expires_at'] ?? null,
+            ]);
+        } catch (HubException $e) {
+            return $this->hubError($e);
+        }
+    }
+
     private function accountId(): string
     {
         if (! app()->bound(ResolvesAccountId::class)) {

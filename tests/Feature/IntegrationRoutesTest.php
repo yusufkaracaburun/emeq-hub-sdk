@@ -166,6 +166,32 @@ describe('with account resolver', function (): void {
 
         $mock->assertNotSent(DeleteConnectionRequest::class);
     });
+
+    it('mints a Hub hosted connect-session URL', function (): void {
+        $mock = new MockClient([
+            \Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest::class => MockResponse::make([
+                'url' => 'https://hub.example.test/connect/acc?signature=abc',
+                'expires_at' => '2026-08-11T22:00:00+00:00',
+            ], 200),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->postJson('/api/integrations/connect-session')
+            ->assertOk()
+            ->assertJsonPath('url', 'https://hub.example.test/connect/acc?signature=abc');
+
+        $mock->assertSent(function (Request $request): bool {
+            if (! $request instanceof \Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest) {
+                return false;
+            }
+
+            $body = $request->body()->all();
+
+            return ($body['account_external_id'] ?? null) === 'tenant-77'
+                && ($body['display_name'] ?? null) === 'Demo BV'
+                && str_ends_with((string) ($body['return_url'] ?? ''), '/integrations/oauth-callback');
+        });
+    });
 });
 
 it('returns 503 when ResolvesAccountId is not bound', function (): void {
