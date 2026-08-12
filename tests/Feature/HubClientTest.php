@@ -117,29 +117,49 @@ it('sends accounting list requests with account header and query', function (): 
 
     app(HubConnector::class)->withMockClient($mock);
 
-    $documents = app(Hub::class)->accounting()->documents(['page' => 2], 'tenant-1');
+    $page = app(Hub::class)->accounting()->documents(['type' => 'sales_invoice'], 'tenant-1');
 
-    expect($documents)->toHaveCount(1);
+    expect($page->items)->toHaveCount(1);
 
     $mock->assertSent(function (GetAccountingRequest $request): bool {
         return $request->resolveEndpoint() === '/accounting/documents'
-            && $request->query()->all() === ['page' => 2];
+            && $request->query()->all() === ['type' => 'sales_invoice'];
     });
 });
 
-it('unwraps a data-wrapped accounting collection', function (): void {
+it('keeps the cursor from a paginated accounting collection', function (): void {
+    // Hub answers collection reads with {data, next_cursor}; dropping the cursor
+    // would make paging impossible.
     $mock = new MockClient([
         GetAccountingRequest::class => MockResponse::make([
             'data' => [['id' => 'doc-1'], ['id' => 'doc-2']],
-            'meta' => ['page' => 1, 'total' => 2],
+            'next_cursor' => 'eyJvIjoyfQ==',
         ], 200),
     ]);
 
     app(HubConnector::class)->withMockClient($mock);
 
-    // Collections return the list itself; any envelope around it is dropped.
-    expect(app(Hub::class)->accounting()->documents([], 'tenant-1'))
-        ->toBe([['id' => 'doc-1'], ['id' => 'doc-2']]);
+    $page = app(Hub::class)->accounting()->documents(['type' => 'sales_invoice'], 'tenant-1');
+
+    expect($page->items)->toBe([['id' => 'doc-1'], ['id' => 'doc-2']])
+        ->and($page->nextCursor)->toBe('eyJvIjoyfQ==')
+        ->and($page->hasMore())->toBeTrue();
+});
+
+it('reports the last page as having no cursor', function (): void {
+    $mock = new MockClient([
+        GetAccountingRequest::class => MockResponse::make([
+            'data' => [['id' => 'doc-9']],
+            'next_cursor' => null,
+        ], 200),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    $page = app(Hub::class)->accounting()->taxCodes([], 'tenant-1');
+
+    expect($page->nextCursor)->toBeNull()
+        ->and($page->hasMore())->toBeFalse();
 });
 
 it('throws a catchable HubException when no account id can be resolved', function (): void {

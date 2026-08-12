@@ -46,54 +46,48 @@ class Accounting extends Resource
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function documents(array $query = [], ?string $accountId = null): array
+    public function documents(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/documents', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function bankStatements(array $query = [], ?string $accountId = null): array
+    public function bankStatements(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/bank-statements', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function ledgerAccounts(array $query = [], ?string $accountId = null): array
+    public function ledgerAccounts(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/ledger-accounts', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function taxCodes(array $query = [], ?string $accountId = null): array
+    public function taxCodes(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/tax-codes', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function customers(array $query = [], ?string $accountId = null): array
+    public function customers(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/customers', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    public function suppliers(array $query = [], ?string $accountId = null): array
+    public function suppliers(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/suppliers', $query, $accountId);
     }
@@ -151,14 +145,13 @@ class Accounting extends Resource
     }
 
     /**
-     * Collection endpoints: Hub returns a bare list or a `data`-wrapped one.
+     * Collection endpoints: `{data: [...], next_cursor: "…"}`.
      *
      * @param  array<string, mixed>  $query
-     * @return list<array<string, mixed>>
      */
-    private function getList(string $path, array $query, ?string $accountId): array
+    private function getList(string $path, array $query, ?string $accountId): AccountingPage
     {
-        return $this->jsonList($this->send($path, $query, $accountId));
+        return AccountingPage::fromPayload($this->send($path, $query, $accountId));
     }
 
     /**

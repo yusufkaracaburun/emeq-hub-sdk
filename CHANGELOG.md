@@ -7,10 +7,10 @@ Second half of the architecture audit — the 🟡 rows.
 ### Changed
 
 - **Breaking:** accounting collection getters (`documents()`, `bankStatements()`,
-  `ledgerAccounts()`, `taxCodes()`, `customers()`, `suppliers()`) return
-  `list<array<string, mixed>>`. A `{data: [...], meta: {...}}` response now
-  yields just the list; any envelope, including pagination meta, is dropped.
-  Previously the whole payload was passed through.
+  `ledgerAccounts()`, `taxCodes()`, `customers()`, `suppliers()`) return an
+  `AccountingPage` with `items` and `nextCursor` instead of a raw array. Hub
+  answers these with `{data: [...], next_cursor: "…"}`; the previous union
+  return type pushed that shape onto every caller.
 - **Breaking:** `SpatieWebhookClientConfig::make()` takes `$signingSecret` as its
   required first argument and no longer falls back to `config()`.
 - `IntegrationController` takes `Hub` and both resolver contracts as constructor

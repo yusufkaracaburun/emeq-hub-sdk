@@ -156,6 +156,20 @@ Hub::connections()->delete($connectionId);
 Hub::accounting()->validateDocument($payload);
 Hub::accounting()->createDocument($payload, idempotencyKey: (string) Str::uuid());
 Hub::accounting()->capabilities();
+
+// Collection reads are cursor-paginated and return an AccountingPage.
+$page = Hub::accounting()->documents(['type' => 'sales_invoice']);
+
+foreach ($page->items as $document) {
+    // …
+}
+
+while ($page->hasMore()) {
+    $page = Hub::accounting()->documents([
+        'type' => 'sales_invoice',
+        'cursor' => $page->nextCursor,
+    ]);
+}
 ```
 
 ## API surface
