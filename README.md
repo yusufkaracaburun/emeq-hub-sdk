@@ -311,6 +311,9 @@ DONE WHEN
 - [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent prompts
 - Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api`
 
+Contributing to this package: [`CONTEXT.md`](CONTEXT.md) for the domain language
+and structural rules, [`docs/adr/`](docs/adr/) for the decisions behind them.
+
 ## Requirements
 
 - PHP 8.3+
