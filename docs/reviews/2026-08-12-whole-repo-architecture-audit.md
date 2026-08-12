@@ -8,9 +8,10 @@
 **Files walked:** 62 · **LOC:** 2 837 (src 2 136 / tests 701) · **Audit duration:** ~25 min
 **Auditor:** /ai:audit-architecture (ai-kit v1.47.1)
 
-> **Status 2026-08-12:** all 🔴/🟠 rows fixed and released as 0.7.0 (commits
-> `20beb3a`…`afc161c`). The 🟡 rows are open. Fixing this also surfaced a blocker
-> the audit missed — see the note under the rolling table.
+> **Status 2026-08-12:** every row fixed — 🔴/🟠 in 0.7.0 (`20beb3a`…`afc161c`),
+> 🟡 in `d27ed2f`…`ed069e9`. E2 and E3 needed no separate change; `20beb3a` had
+> already rewritten both docblocks. Fixing this surfaced two things the audit
+> missed — see the note under the rolling table.
 
 ## Summary
 
@@ -201,19 +202,19 @@ Level 5 misses exactly the class of defect this audit found by hand (nullable re
 | F1 | ✅ fixed — Trait constructor calls `parent::__construct()`; parent↔trait cycle | 🟠 | Interface/abstract contract between the two | webhooks |
 | F2 | ✅ fixed — Hollow `WebhookCall` after unserialize degrades to a silent skip | 🟠 | Detect hollow model in `resolveWebhookCall()` and throw | webhooks |
 | I1 | ✅ fixed — `HubWebhookEvent` is string consts, not a backed enum | 🟠 | `enum … : string` + `tryFrom() ?? Unmapped` (breaking → 0.7) | webhooks |
-| C3 | Event-id extraction encoded in both PHP and SQL | 🟡 | `HubWebhookHeaders::whereEventId()` owns the storage shape | webhooks |
-| C4 | Six resources repeat the same constructor + trait wiring | 🟡 | `abstract class Resource` | resources |
-| B2 | Controller resolves collaborators from the container, no seam | 🟡 | Constructor injection | http |
-| D1 | Unreachable second `//` guard | 🟡 | Delete lines 40-47 | support |
-| D2 | Empty `boot()` override | 🟡 | Delete | http |
-| D3 | `accountId()` called for its side effect, return dropped | 🟡 | Rename to `assertAccountResolverBound()` | http |
-| E1 | `@see HubManager` names a non-existent class | 🟡 | Reference `Emeq\HubSdk\Hub` | facades |
-| E2 | `MapHubErrors` docblock describes the inverse of the behaviour | 🟡 | Rewrite alongside C1 | http |
-| E3 | `@var` annotation asserts what the next line re-checks | 🟡 | Drop the annotation or the check | http |
-| F3 | `config()` fallback inside a pure static builder | 🟡 | Require `string $signingSecret` | webhooks |
-| G1 | No declared architecture (no CONTEXT.md / ADRs) | 🟡 | Record the two non-obvious decisions as ADRs | repo |
-| I2 | Un-narrowed union return types; double-validated payloads | 🟡 | Split `get()` into object/list variants | resources |
-| I3 | Larastan level 5 of 9 | 🟡 | Climb one level at a time | tooling |
+| C3 | ✅ fixed — Event-id extraction encoded in both PHP and SQL | 🟡 | `HubWebhookHeaders::whereEventId()` owns the storage shape | webhooks |
+| C4 | ✅ fixed — Six resources repeat the same constructor + trait wiring | 🟡 | `abstract class Resource` | resources |
+| B2 | ✅ fixed — Controller resolves collaborators from the container, no seam | 🟡 | Constructor injection | http |
+| D1 | ✅ fixed — Unreachable second `//` guard | 🟡 | Delete lines 40-47 | support |
+| D2 | ✅ fixed — Empty `boot()` override | 🟡 | Delete | http |
+| D3 | ✅ fixed — `accountId()` called for its side effect, return dropped | 🟡 | Rename to `assertAccountResolverBound()` | http |
+| E1 | ✅ fixed — `@see HubManager` names a non-existent class | 🟡 | Reference `Emeq\HubSdk\Hub` | facades |
+| E2 | ✅ fixed — `MapHubErrors` docblock describes the inverse of the behaviour | 🟡 | Rewrite alongside C1 | http |
+| E3 | ✅ fixed — `@var` annotation asserts what the next line re-checks | 🟡 | Drop the annotation or the check | http |
+| F3 | ✅ fixed — `config()` fallback inside a pure static builder | 🟡 | Require `string $signingSecret` | webhooks |
+| G1 | ✅ fixed — No declared architecture (no CONTEXT.md / ADRs) | 🟡 | Record the two non-obvious decisions as ADRs | repo |
+| I2 | ✅ fixed — Un-narrowed union return types; double-validated payloads | 🟡 | Split `get()` into object/list variants | resources |
+| I3 | ✅ fixed — Larastan level 5 of 9 | 🟡 | Climb one level at a time | tooling |
 
 ## What the audit missed
 
@@ -236,3 +237,23 @@ hid it, and both are audit lessons rather than code findings:
    uncovered. Dimension coverage says nothing about *execution* coverage.
 
 Fixed in `72a8f4d`; the exclusion is gone and the suite is clean without it.
+
+### And a second one, found the same way
+
+Making `SpatieWebhookClientConfig::make()` pure (finding F3) turned the whole
+suite red with `Argument #1 ($signingSecret) not passed`, from a caller that does
+not exist in this repo:
+
+```
+vendor/orchestra/testbench-core/laravel/config/webhook-client.php:24
+```
+
+A `vendor:publish` run from before `f0d3070` — the commit that deleted
+`config/webhook-client.php.stub` and its publish tag — had left the published
+file inside the testbench skeleton. Testbench loads that directory on every boot,
+so for weeks the suite was reading a config file the repository no longer had,
+and calling a method with the arguments that file happened to use.
+
+**Lesson:** tests that publish assets write into `vendor/`, and that is not
+cleaned by anything. What the suite loads at boot is not necessarily what the
+repository contains. Deleted; a fresh `composer install` will not recreate it.

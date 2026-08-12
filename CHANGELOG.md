@@ -1,5 +1,38 @@
 # Changelog
 
+## [Unreleased]
+
+Second half of the architecture audit — the 🟡 rows.
+
+### Changed
+
+- **Breaking:** accounting collection getters (`documents()`, `bankStatements()`,
+  `ledgerAccounts()`, `taxCodes()`, `customers()`, `suppliers()`) return
+  `list<array<string, mixed>>`. A `{data: [...], meta: {...}}` response now
+  yields just the list; any envelope, including pagination meta, is dropped.
+  Previously the whole payload was passed through.
+- **Breaking:** `SpatieWebhookClientConfig::make()` takes `$signingSecret` as its
+  required first argument and no longer falls back to `config()`.
+- `IntegrationController` takes `Hub` and both resolver contracts as constructor
+  parameters.
+- Resources share an abstract `Resources\Resource` base.
+- `HubWebhookHeaders::whereEventId()` owns the stored-header shape for queries.
+- Untrusted JSON and consumer config are narrowed rather than cast: a non-scalar
+  now reads as absent instead of becoming `"Array"`.
+- Larastan raised from level 5 to 9.
+
+### Removed
+
+- The unreachable second `//` guard in `OAuthReturnUrl`, the empty
+  `HubConnector::boot()` override, and the `HubManager` alias that named a class
+  which does not exist.
+
+### Development tooling
+
+- `CONTEXT.md` and `docs/adr/` record the domain language, the layer rules and
+  the two non-obvious decisions (provider-agnostic surface, publish-only
+  migrations). Both are `export-ignore`d.
+
 ## [0.7.0] — 2026-08-12
 
 Architecture audit follow-up: every 🔴/🟠 finding from
