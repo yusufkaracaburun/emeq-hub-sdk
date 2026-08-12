@@ -9,7 +9,6 @@ use Emeq\HubSdk\Http\Middleware\MapHubErrors;
 use Saloon\Contracts\Authenticator;
 use Saloon\Http\Auth\TokenAuthenticator;
 use Saloon\Http\Connector;
-use Saloon\Http\PendingRequest;
 use Saloon\Http\Response;
 use Throwable;
 
@@ -71,10 +70,5 @@ class HubConnector extends Connector
     public function getRequestException(Response $response, ?Throwable $senderException): ?Throwable
     {
         return HubErrorResponse::toException($response, $senderException);
-    }
-
-    public function boot(PendingRequest $pendingRequest): void
-    {
-        // no-op — account headers are set per request
     }
 }

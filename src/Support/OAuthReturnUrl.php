@@ -31,12 +31,10 @@ final class OAuthReturnUrl
             throw MissingConfigurationException::invalidOAuthReturnPath();
         }
 
+        // Safe to prepend: a value starting with `//` already threw above, and
+        // one not starting with `/` cannot become `//` by gaining a single slash.
         if (! str_starts_with($returnPath, '/')) {
             $returnPath = '/'.$returnPath;
-        }
-
-        if (str_starts_with($returnPath, '//')) {
-            throw MissingConfigurationException::invalidOAuthReturnPath();
         }
 
         return $request->getSchemeAndHttpHost().$returnPath;

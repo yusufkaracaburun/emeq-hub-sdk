@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Facades;
 
 use Emeq\HubSdk\Http\HubConnector;
-use Emeq\HubSdk\Hub as HubManager;
 use Emeq\HubSdk\Resources\Accounting;
 use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
@@ -23,12 +22,14 @@ use Illuminate\Support\Facades\Facade;
  * @method static Connections connections()
  * @method static Accounting accounting()
  *
- * @see HubManager
+ * @see \Emeq\HubSdk\Hub
  */
 class Hub extends Facade
 {
     protected static function getFacadeAccessor(): string
     {
-        return HubManager::class;
+        // Not imported: the facade shares its short name with the class it
+        // proxies, and an alias here would name a class that does not exist.
+        return \Emeq\HubSdk\Hub::class;
     }
 }

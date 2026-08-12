@@ -29,7 +29,9 @@ class IntegrationController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $this->accountId();
+            // Guard only: the catalog is account-optional, but this endpoint is
+            // not usable at all without a bound resolver.
+            $this->assertAccountResolverBound();
 
             return response()->json(Hub::integrations()->list());
         } catch (HubException $e) {
@@ -69,11 +71,16 @@ class IntegrationController extends Controller
 
     private function accountId(): string
     {
+        $this->assertAccountResolverBound();
+
+        return app(ResolvesAccountId::class)->accountId();
+    }
+
+    private function assertAccountResolverBound(): void
+    {
         if (! app()->bound(ResolvesAccountId::class)) {
             throw MissingConfigurationException::missingAccountResolver();
         }
-
-        return app(ResolvesAccountId::class)->accountId();
     }
 
     private function hubError(HubException $e): JsonResponse
