@@ -127,6 +127,21 @@ it('sends accounting list requests with account header and query', function (): 
     });
 });
 
+it('unwraps a data-wrapped accounting collection', function (): void {
+    $mock = new MockClient([
+        GetAccountingRequest::class => MockResponse::make([
+            'data' => [['id' => 'doc-1'], ['id' => 'doc-2']],
+            'meta' => ['page' => 1, 'total' => 2],
+        ], 200),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    // Collections return the list itself; any envelope around it is dropped.
+    expect(app(Hub::class)->accounting()->documents([], 'tenant-1'))
+        ->toBe([['id' => 'doc-1'], ['id' => 'doc-2']]);
+});
+
 it('throws a catchable HubException when no account id can be resolved', function (): void {
     // No ResolvesAccountId bound and no explicit id: consumers who wrap SDK
     // calls in catch (HubException) must still catch this.

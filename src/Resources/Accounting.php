@@ -46,56 +46,56 @@ class Accounting extends Resource
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function documents(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/documents', $query, $accountId);
+        return $this->getList('/accounting/documents', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function bankStatements(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/bank-statements', $query, $accountId);
+        return $this->getList('/accounting/bank-statements', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function ledgerAccounts(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/ledger-accounts', $query, $accountId);
+        return $this->getList('/accounting/ledger-accounts', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function taxCodes(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/tax-codes', $query, $accountId);
+        return $this->getList('/accounting/tax-codes', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function customers(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/customers', $query, $accountId);
+        return $this->getList('/accounting/customers', $query, $accountId);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public function suppliers(array $query = [], ?string $accountId = null): array
     {
-        return $this->get('/accounting/suppliers', $query, $accountId);
+        return $this->getList('/accounting/suppliers', $query, $accountId);
     }
 
     /**
@@ -103,7 +103,7 @@ class Accounting extends Resource
      */
     public function capabilities(?string $accountId = null): array
     {
-        return $this->json($this->get('/accounting/capabilities', [], $accountId));
+        return $this->getObject('/accounting/capabilities', $accountId);
     }
 
     /**
@@ -111,7 +111,7 @@ class Accounting extends Resource
      */
     public function referenceData(?string $accountId = null): array
     {
-        return $this->json($this->get('/accounting/reference-data', [], $accountId));
+        return $this->getObject('/accounting/reference-data', $accountId);
     }
 
     /**
@@ -119,7 +119,7 @@ class Accounting extends Resource
      */
     public function mapping(?string $accountId = null): array
     {
-        return $this->json($this->get('/accounting/mapping', [], $accountId));
+        return $this->getObject('/accounting/mapping', $accountId);
     }
 
     /**
@@ -151,23 +151,35 @@ class Accounting extends Resource
     }
 
     /**
+     * Collection endpoints: Hub returns a bare list or a `data`-wrapped one.
+     *
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>|list<array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
-    private function get(string $path, array $query, ?string $accountId): array
+    private function getList(string $path, array $query, ?string $accountId): array
     {
-        $response = $this->connector->send(new GetAccountingRequest(
+        return $this->jsonList($this->send($path, $query, $accountId));
+    }
+
+    /**
+     * Single-object endpoints.
+     *
+     * @return array<string, mixed>
+     */
+    private function getObject(string $path, ?string $accountId): array
+    {
+        return $this->json($this->send($path, [], $accountId));
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    private function send(string $path, array $query, ?string $accountId): mixed
+    {
+        return $this->connector->send(new GetAccountingRequest(
             path: $path,
             accountId: $this->resolveAccountId($accountId),
             queryParameters: $query,
-        ));
-
-        $payload = $response->json();
-
-        if (! is_array($payload)) {
-            return $this->json($payload);
-        }
-
-        return $payload;
+        ))->json();
     }
 }
