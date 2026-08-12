@@ -15,7 +15,7 @@ sites, and inbound webhook wiring.
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.6
+composer require emeq/hub-sdk:^0.7
 ```
 
 ```bash
@@ -33,7 +33,11 @@ EMEQ_HUB_WEBHOOK_SECRET=shared-with-hub-consumer-callback-secret
 # Opt-in BFF routes (default off) — enable + tune middleware to your guard
 EMEQ_HUB_ROUTES=true
 EMEQ_HUB_ROUTES_PREFIX=api
+# Default when unset: api,auth:sanctum,throttle:60,1 — this var is comma-split,
+# so use a named limiter (throttle:hub) if you override it.
 EMEQ_HUB_ROUTES_MIDDLEWARE=api,auth:sanctum
+# Cache store for webhook dedupe locks. Empty = default store (must support locks).
+EMEQ_HUB_WEBHOOK_LOCK_STORE=redis
 # Relative path on YOUR host only (no https://…). Empty = omit return_url.
 EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 ```
@@ -120,8 +124,21 @@ subclasses unless you need tenancy hooks:
 | `HubWebhookIgnored` | Other canonical events (default: log only) |
 
 Override `onConnectionRevoked()` / `onIgnored()` on a job subclass if you prefer
-hooks over listeners. Event names: `HubWebhookEvent` (keep in sync with Hub
-`CanonicalEvent`).
+hooks over listeners. `HubWebhookEvent` is a backed enum (keep in sync with Hub
+`CanonicalEvent`); `$envelope->event` is an enum case, and an event added by Hub
+after your SDK release decodes to `HubWebhookEvent::UNMAPPED` rather than
+throwing.
+
+```php
+if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
+$wireValue = $envelope->event->value; // 'connection.revoked'
+```
+
+Deduplication takes a cache lock per `X-Emeq-Event-Id` so concurrent redeliveries
+cannot both process. That store must support atomic locks: Laravel's `database`
+default needs the framework's `cache_locks` table, or point
+`EMEQ_HUB_WEBHOOK_LOCK_STORE` at redis/memcached. A failed job records its
+exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicate.
 
 ## Usage
 
@@ -184,7 +201,10 @@ Envelope fields map to public properties: `error`, `category`, `requestId`, `sta
 | 422 / `VALIDATION_ERROR` | `ValidationException` |
 | 429 | `RateLimitException` |
 | ≥ 500 | `ServerException` |
-| Missing `EMEQ_HUB_*` | `MissingConfigurationException` |
+| Missing `EMEQ_HUB_*`, unresolvable account id, bad `return_path`, non-lockable cache store | `MissingConfigurationException` (503) |
+
+Every SDK failure is a `HubException` — configuration mistakes included, so
+`catch (HubException $e)` around SDK calls is sufficient.
 
 Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_id`.
 
@@ -227,7 +247,7 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.6
+   composer require emeq/hub-sdk:^0.7
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
@@ -295,3 +315,36 @@ DONE WHEN
 
 - PHP 8.3+
 - Laravel 13
+
+## Local development
+
+```bash
+composer install
+composer test        # Pest on Orchestra Testbench
+composer analyse     # Larastan
+composer format      # Pint
+```
+
+This repository ships [Laravel Boost](https://laravel.com/docs/boost) for AI agents. Because a package has no application, Boost is booted through the development-only `artisan` shim in the repository root — it creates a bare app rooted at the package so `base_path()` resolves here instead of inside `vendor/`. Everything Boost writes (`artisan`, `boost.json`, `config/boost.php`, `CLAUDE.md`, `.mcp.json`, `.ai/`, agent directories) is `export-ignore`d and never reaches consumers.
+
+```bash
+php artisan boost:install   # (re)wire guidelines, skills and MCP config
+php artisan boost:update    # refresh guidelines after a dependency bump
+```
+
+MCP tools that need a running application (database, browser logs, application log, URL generation) are disabled in `config/boost.php`; `application-info`, `search-docs` and `record-rule` remain. Project guidelines specific to this package live in `.ai/guidelines/package.blade.php` — edit there, then re-run `boost:install --guidelines`, never edit the generated block in `CLAUDE.md` by hand.
+
+Every agent artefact exists exactly once; the per-agent paths are symlinks:
+
+| Physical file | Symlinks pointing at it |
+| --- | --- |
+| `CLAUDE.md` (generated) | `AGENTS.md` |
+| `.mcp.json` | `.cursor/mcp.json` |
+| `.ai/skills/<name>` | `.claude/skills/<name>`, `.cursor/skills/<name>` |
+
+Boost writes through symlinks, so `boost:install` and `boost:update` keep this layout intact — verified against a full `--guidelines --mcp --skills` run. The trade-off is on skills only: anything under `.ai/skills` counts as a user skill and shadows the vendor copy, so Boost stops refreshing it. To pull in upstream changes for a Boost-shipped skill:
+
+```bash
+rm -rf .ai/skills/<name> .claude/skills/<name> .cursor/skills/<name>
+php artisan boost:install --skills
+```

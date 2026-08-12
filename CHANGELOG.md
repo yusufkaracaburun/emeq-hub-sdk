@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.7.0] — 2026-08-12
+
+Architecture audit follow-up: every 🔴/🟠 finding from
+`docs/reviews/2026-08-12-whole-repo-architecture-audit.md`, plus one blocker the
+audit itself missed.
+
+### Fixed
+
+- **Every accounting `GET` was unusable.** `GetAccountingRequest` promoted a
+  `readonly array $query`, redeclaring Saloon's non-readonly `Request::$query`,
+  which is a fatal error at class load. The class sat in `phpstan excludePaths`
+  and had no test, so nothing caught it. Constructor parameter renamed to
+  `$queryParameters`; the exclusion is gone and the suite is clean without it.
+- **A crashed webhook job suppressed its own redelivery.** `alreadyProcessed()`
+  treats a row with a null `exception` as handled, but only Spatie's synchronous
+  path ever wrote that column. `ProcessHubWebhookJob::failed()` now records the
+  exception, with explicit `$tries` / `$backoff`.
+- **Concurrent redeliveries of one event id both processed.** The dedupe guard
+  now runs under a cache lock keyed on config name + event id.
+- **A restored multi-DB job silently dropped its webhook.** `__unserialize()`
+  rebuilds a `WebhookCall` holding only an id; the default `resolveWebhookCall()`
+  returned it as-is, so the payload was null and the job logged
+  `invalid_payload_in_job` and returned. It now reloads the row — after
+  `bindAccountContext()`, so on the right connection.
+
+### Changed
+
+- **Breaking:** `HubWebhookEvent` is a backed enum and `HubWebhookEnvelope::$event`
+  is an enum case. Case names are unchanged, so
+  `$envelope->event === HubWebhookEvent::CONNECTION_REVOKED` still works; reading
+  the event as a string needs `->value`. Unknown events decode to `UNMAPPED`.
+- **Breaking:** an unresolvable account id throws `MissingConfigurationException`
+  (503, catchable as `HubException`) instead of `InvalidArgumentException`.
+  `Integrations::list()` documents why the catalog is account-optional.
+- **Breaking:** a malformed `hub.oauth.return_path` raises
+  `MissingConfigurationException` (503) instead of `ValidationException` (422) —
+  it is a deployment mistake, not caller input. The `error` code is unchanged.
+- **Breaking:** default route middleware is now
+  `['api', 'auth:sanctum', 'throttle:60,1']`. `EMEQ_HUB_ROUTES_MIDDLEWARE` is
+  comma-split and cannot express `throttle:60,1`; use a named limiter when
+  overriding.
+- **Breaking:** `ProcessHubWebhookJob` owns `$accountId` / `$webhookCallId` and
+  `accountIdForHandle()` is gone; `SerializesHubWebhookByIds` is reduced to
+  `__serialize` / `__unserialize`. Subclasses that overrode
+  `accountIdForHandle()` move that logic to the constructor or
+  `resolveWebhookCall()`.
+- New `hub.webhook.lock_store` (`EMEQ_HUB_WEBHOOK_LOCK_STORE`). The store must
+  support atomic locks — Laravel's `database` default needs the framework's
+  `cache_locks` table — otherwise the job raises
+  `MissingConfigurationException` rather than racing.
+- Error-envelope decoding lives in one place (`Http\HubErrorResponse`); the
+  response middleware and the connector's exception hook both delegate to it.
+
+## [Unreleased]
+
+### Added
+
+- Laravel Boost as a dev dependency, wired for a package repository: an
+  `artisan` shim boots a bare app rooted at the package so Boost resolves
+  `base_path()` here instead of inside `vendor/`. Guidelines, skills and MCP
+  config are generated for the detected agents; app-only MCP tools are
+  disabled in `config/boost.php`. All of it is `export-ignore`d — the
+  distributed package is unchanged.
+
 ## [0.6.0] — 2026-08-12
 
 ### Changed
