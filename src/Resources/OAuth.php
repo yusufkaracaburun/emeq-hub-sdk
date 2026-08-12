@@ -4,20 +4,10 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Resources;
 
-use Emeq\HubSdk\Contracts\ResolvesAccountId;
-use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
-use Emeq\HubSdk\Support\ResolvesAccountContext;
 
-class OAuth
+class OAuth extends Resource
 {
-    use ResolvesAccountContext;
-
-    public function __construct(
-        private readonly HubConnector $connector,
-        private readonly ?ResolvesAccountId $accountIdResolver = null,
-    ) {}
-
     /**
      * Start OAuth for any Hub provider key (no SDK allowlist).
      *

@@ -4,18 +4,10 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Resources;
 
-use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounts\CreateAccountRequest;
-use Emeq\HubSdk\Support\DecodesHubJson;
 
-class Accounts
+class Accounts extends Resource
 {
-    use DecodesHubJson;
-
-    public function __construct(
-        private readonly HubConnector $connector,
-    ) {}
-
     /**
      * @return array<string, mixed>
      */

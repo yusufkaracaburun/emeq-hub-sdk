@@ -4,27 +4,17 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Resources;
 
-use Emeq\HubSdk\Contracts\ResolvesAccountId;
-use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\CreateDocumentRequest;
 use Emeq\HubSdk\Http\Request\Accounting\GetAccountingRequest;
 use Emeq\HubSdk\Http\Request\Accounting\PutMappingRequest;
 use Emeq\HubSdk\Http\Request\Accounting\SyncAccountingRequest;
 use Emeq\HubSdk\Http\Request\Accounting\ValidateDocumentRequest;
-use Emeq\HubSdk\Support\ResolvesAccountContext;
 
 /**
  * Canonical accounting surface — Hub picks the partner adapter.
  */
-class Accounting
+class Accounting extends Resource
 {
-    use ResolvesAccountContext;
-
-    public function __construct(
-        private readonly HubConnector $connector,
-        private readonly ?ResolvesAccountId $accountIdResolver = null,
-    ) {}
-
     /**
      * @param  array<string, mixed>  $document
      * @return array<string, mixed>

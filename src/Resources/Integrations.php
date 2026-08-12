@@ -4,20 +4,10 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Resources;
 
-use Emeq\HubSdk\Contracts\ResolvesAccountId;
-use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
-use Emeq\HubSdk\Support\ResolvesAccountContext;
 
-class Integrations
+class Integrations extends Resource
 {
-    use ResolvesAccountContext;
-
-    public function __construct(
-        private readonly HubConnector $connector,
-        private readonly ?ResolvesAccountId $accountIdResolver = null,
-    ) {}
-
     /**
      * Data-driven provider catalog (+ optional per-account status).
      * New Hub partners appear here without an SDK release.
