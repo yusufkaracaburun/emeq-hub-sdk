@@ -24,7 +24,7 @@ final class SpatieWebhookClientConfig
     ): array {
         return [
             'name' => $name,
-            'signing_secret' => $signingSecret ?? (string) config('hub.webhook_secret', ''),
+            'signing_secret' => $signingSecret ?? (string) config('hub.webhook.secret', ''),
             'signature_header_name' => HubWebhookHeaders::SIGNATURE,
             'signature_validator' => DefaultSignatureValidator::class,
             'webhook_profile' => $profileClass,

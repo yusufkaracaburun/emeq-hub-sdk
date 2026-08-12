@@ -19,7 +19,7 @@ use Spatie\WebhookClient\Models\WebhookCall;
 use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
 
 beforeEach(function () {
-    config()->set('hub.webhook_secret', 'test-webhook-secret');
+    config()->set('hub.webhook.secret', 'test-webhook-secret');
 
     Schema::dropIfExists('webhook_calls');
     Schema::create('webhook_calls', function ($table) {
@@ -58,8 +58,8 @@ function makeWebhookCall(array $overrides = []): WebhookCall
     return $call->fresh();
 }
 
-test('spatie config uses hub.webhook_secret from config', function () {
-    config()->set('hub.webhook_secret', 'from-config');
+test('spatie config uses hub.webhook.secret from config', function () {
+    config()->set('hub.webhook.secret', 'from-config');
 
     $entry = SpatieWebhookClientConfig::make();
 

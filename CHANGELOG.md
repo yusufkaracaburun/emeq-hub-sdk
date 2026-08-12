@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0] — 2026-08-12
+
+### Changed
+
+- **Breaking:** single publishable config — webhook wiring lives under
+  `hub.webhook.{secret,name,profile,job}`. `HubServiceProvider` upserts the
+  Hub entry into Spatie `webhook-client.configs` at boot.
+- **Breaking:** removed publish tag `hub-webhook-client` and
+  `config/webhook-client.php.stub`. `hub:install` publishes only `hub-config`
+  + `hub-migrations`.
+- **Breaking:** `hub.webhook_secret` → `hub.webhook.secret`.
+- Multi-DB consumers override `hub.webhook.job` / `hub.webhook.profile` in
+  `config/hub.php` instead of a separate Spatie config file.
+- Branch alias `dev-master` → `0.6.x-dev`.
+- README / AI prompt require `^0.6`.
+
 ## [0.5.1] — 2026-08-12
 
 ### Fixed

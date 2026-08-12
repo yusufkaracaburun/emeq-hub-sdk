@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Emeq\HubSdk\Webhooks\HubWebhookProfile;
+use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
+
 return [
 
     /*
@@ -28,22 +31,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Inbound Hub webhooks (Spatie webhook-client)
-    |--------------------------------------------------------------------------
-    |
-    | Shared HMAC secret with Hub Consumer `webhook_callback_secret`.
-    | Wire profile/job via SpatieWebhookClientConfig::make() in
-    | config/webhook-client.php — see README.
-    |
-    */
-    'webhook_secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
-
-    /*
-    |--------------------------------------------------------------------------
     | HTTP
     |--------------------------------------------------------------------------
     */
     'timeout' => (int) env('EMEQ_HUB_TIMEOUT', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inbound Hub webhooks (Spatie webhook-client)
+    |--------------------------------------------------------------------------
+    |
+    | Shared HMAC secret with Hub Consumer `webhook_callback_secret`.
+    | The service provider upserts this entry into webhook-client.configs.
+    | Multi-DB: override `job` / `profile` here — no separate Spatie publish.
+    |
+    */
+    'webhook' => [
+        'secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
+        'name' => 'emeq-hub',
+        'profile' => HubWebhookProfile::class,
+        'job' => ProcessHubWebhookJob::class,
+    ],
 
     /*
     |--------------------------------------------------------------------------

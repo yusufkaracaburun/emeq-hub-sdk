@@ -7,6 +7,9 @@ namespace Emeq\HubSdk;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Support\HubRouteMiddleware;
+use Emeq\HubSdk\Webhooks\HubWebhookProfile;
+use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
+use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Contracts\Config\Repository;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
@@ -25,7 +28,6 @@ class HubServiceProvider extends PackageServiceProvider
                 $command
                     ->publishConfigFile()
                     ->publishMigrations()
-                    ->publish('webhook-client')
                     ->endWith(function (InstallCommand $command): void {
                         $command->info('Next steps:');
                         $command->line('1. Set EMEQ_HUB_* in .env (BASE, PAT, WEBHOOK_SECRET, …)');
@@ -34,7 +36,7 @@ class HubServiceProvider extends PackageServiceProvider
                         $command->line('4. Route::webhooks(\'webhooks/emeq-hub\', \'emeq-hub\') + CSRF except');
                         $command->line('5. Migrate webhook_calls on the webhook DB (tenant DB if multi-DB)');
                         $command->line('6. Listen for HubConnectionRevoked / HubWebhookReceived / HubWebhookIgnored');
-                        $command->line('7. Multi-DB: subclass ProcessHubWebhookJob + SerializesHubWebhookByIds');
+                        $command->line('7. Multi-DB: set hub.webhook.job (+ profile) in config/hub.php');
                     });
             });
     }
@@ -64,11 +66,7 @@ class HubServiceProvider extends PackageServiceProvider
 
     public function packageBooted(): void
     {
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                $this->package->basePath('/../config/webhook-client.php.stub') => config_path('webhook-client.php'),
-            ], 'hub-webhook-client');
-        }
+        $this->registerHubWebhookClientConfig();
 
         if (! (bool) config('hub.routes.enabled', false)) {
             return;
@@ -78,5 +76,37 @@ class HubServiceProvider extends PackageServiceProvider
         HubRouteMiddleware::assertNotEmpty($middleware);
 
         $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
+    }
+
+    private function registerHubWebhookClientConfig(): void
+    {
+        /** @var Repository $config */
+        $config = $this->app->make('config');
+
+        $name = (string) $config->get('hub.webhook.name', 'emeq-hub');
+        $entry = SpatieWebhookClientConfig::make(
+            profileClass: (string) $config->get('hub.webhook.profile', HubWebhookProfile::class),
+            jobClass: (string) $config->get('hub.webhook.job', ProcessHubWebhookJob::class),
+            signingSecret: (string) $config->get('hub.webhook.secret', ''),
+            name: $name,
+        );
+
+        /** @var list<array<string, mixed>> $configs */
+        $configs = array_values($config->get('webhook-client.configs', []));
+        $replaced = false;
+
+        foreach ($configs as $index => $existing) {
+            if (($existing['name'] ?? null) === $name) {
+                $configs[$index] = $entry;
+                $replaced = true;
+                break;
+            }
+        }
+
+        if (! $replaced) {
+            $configs[] = $entry;
+        }
+
+        $config->set('webhook-client.configs', $configs);
     }
 }
