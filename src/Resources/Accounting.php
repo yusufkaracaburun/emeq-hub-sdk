@@ -169,7 +169,7 @@ class Accounting
         $response = $this->connector->send(new GetAccountingRequest(
             path: $path,
             accountId: $this->resolveAccountId($accountId),
-            query: $query,
+            queryParameters: $query,
         ));
 
         $payload = $response->json();

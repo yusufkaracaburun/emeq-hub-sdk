@@ -15,12 +15,16 @@ class GetAccountingRequest extends Request
     protected Method $method = Method::GET;
 
     /**
-     * @param  array<string, mixed>  $query
+     * Note: not named `$query` — Saloon\Http\Request already declares a
+     * non-readonly `$query` property, and redeclaring it as readonly is a
+     * fatal error at class-load time.
+     *
+     * @param  array<string, mixed>  $queryParameters
      */
     public function __construct(
         private readonly string $path,
         private readonly string $accountId,
-        private readonly array $query = [],
+        private readonly array $queryParameters = [],
     ) {}
 
     public function resolveEndpoint(): string
@@ -35,6 +39,6 @@ class GetAccountingRequest extends Request
 
     protected function defaultQuery(): array
     {
-        return $this->query;
+        return $this->queryParameters;
     }
 }
