@@ -1,42 +1,9 @@
 # Changelog
 
-## [Unreleased]
-
-Second half of the architecture audit — the 🟡 rows.
-
-### Changed
-
-- **Breaking:** accounting collection getters (`documents()`, `bankStatements()`,
-  `ledgerAccounts()`, `taxCodes()`, `customers()`, `suppliers()`) return an
-  `AccountingPage` with `items` and `nextCursor` instead of a raw array. Hub
-  answers these with `{data: [...], next_cursor: "…"}`; the previous union
-  return type pushed that shape onto every caller.
-- **Breaking:** `SpatieWebhookClientConfig::make()` takes `$signingSecret` as its
-  required first argument and no longer falls back to `config()`.
-- `IntegrationController` takes `Hub` and both resolver contracts as constructor
-  parameters.
-- Resources share an abstract `Resources\Resource` base.
-- `HubWebhookHeaders::whereEventId()` owns the stored-header shape for queries.
-- Untrusted JSON and consumer config are narrowed rather than cast: a non-scalar
-  now reads as absent instead of becoming `"Array"`.
-- Larastan raised from level 5 to 9.
-
-### Removed
-
-- The unreachable second `//` guard in `OAuthReturnUrl`, the empty
-  `HubConnector::boot()` override, and the `HubManager` alias that named a class
-  which does not exist.
-
-### Development tooling
-
-- `CONTEXT.md` and `docs/adr/` record the domain language, the layer rules and
-  the two non-obvious decisions (provider-agnostic surface, publish-only
-  migrations). Both are `export-ignore`d.
-
 ## [0.7.0] — 2026-08-12
 
-Architecture audit follow-up: every 🔴/🟠 finding from
-`docs/reviews/2026-08-12-whole-repo-architecture-audit.md`, plus one blocker the
+Architecture audit follow-up: all 23 findings from
+`docs/reviews/2026-08-12-whole-repo-architecture-audit.md`, plus two blockers the
 audit itself missed.
 
 ### Fixed
@@ -85,6 +52,26 @@ audit itself missed.
   `MissingConfigurationException` rather than racing.
 - Error-envelope decoding lives in one place (`Http\HubErrorResponse`); the
   response middleware and the connector's exception hook both delegate to it.
+- **Breaking:** accounting collection getters (`documents()`, `bankStatements()`,
+  `ledgerAccounts()`, `taxCodes()`, `customers()`, `suppliers()`) return an
+  `AccountingPage` with `items` and `nextCursor` instead of a raw array. Hub
+  answers these with `{data: [...], next_cursor: "…"}`; the previous union
+  return type pushed that shape onto every caller.
+- **Breaking:** `SpatieWebhookClientConfig::make()` takes `$signingSecret` as its
+  required first argument and no longer falls back to `config()`.
+- `IntegrationController` takes `Hub` and both resolver contracts as constructor
+  parameters.
+- Resources share an abstract `Resources\Resource` base.
+- `HubWebhookHeaders::whereEventId()` owns the stored-header shape for queries.
+- Untrusted JSON and consumer config are narrowed rather than cast: a non-scalar
+  now reads as absent instead of becoming `"Array"`.
+- Larastan raised from level 5 to 9.
+
+### Removed
+
+- The unreachable second `//` guard in `OAuthReturnUrl`, the empty
+  `HubConnector::boot()` override, and the `HubManager` alias that named a class
+  which does not exist.
 
 ### Development tooling
 
@@ -100,6 +87,9 @@ Nothing here ships: every path below is `export-ignore`d.
   one MCP config.
 - `docs/reviews/2026-08-12-whole-repo-architecture-audit.md` — the audit this
   release answers.
+- `CONTEXT.md` and `docs/adr/` record the domain language, the layer rules and
+  the two non-obvious decisions (provider-agnostic surface, publish-only
+  migrations). Both are `export-ignore`d.
 
 ## [0.6.0] — 2026-08-12
 
