@@ -111,7 +111,8 @@ describe('with account resolver', function (): void {
 
         $response = $this->postJson('/api/integrations/connect-session');
 
-        $response->assertStatus(422)
+        // 503: a broken consumer config is not the API caller's validation error.
+        $response->assertStatus(503)
             ->assertJsonPath('error', 'invalid_return_path');
     });
 

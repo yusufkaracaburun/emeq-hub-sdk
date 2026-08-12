@@ -36,6 +36,16 @@ class MissingConfigurationException extends HubException
         );
     }
 
+    public static function invalidOAuthReturnPath(): self
+    {
+        return new self(
+            'hub.oauth.return_path must be a relative path starting with / (no scheme or //).',
+            error: 'invalid_return_path',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
     public static function missingAccountResolver(): self
     {
         return new self(

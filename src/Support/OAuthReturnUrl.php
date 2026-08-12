@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Support;
 
-use Emeq\HubSdk\Exceptions\ValidationException;
+use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Illuminate\Http\Request;
 
 /**
  * Builds Hub OAuth return_url from a consumer-configured relative path.
  * Never accepts absolute or protocol-relative URLs from config.
+ *
+ * A bad value is a deployment mistake, not caller input — it raises
+ * MissingConfigurationException (503), never a 422 the API caller cannot act on.
  */
 final class OAuthReturnUrl
 {
@@ -25,12 +28,7 @@ final class OAuthReturnUrl
             || str_starts_with($returnPath, '//')
             || str_contains($returnPath, '\\')
         ) {
-            throw new ValidationException(
-                'hub.oauth.return_path must be a relative path starting with / (no scheme or //).',
-                error: 'invalid_return_path',
-                category: 'VALIDATION_ERROR',
-                status: 422,
-            );
+            throw MissingConfigurationException::invalidOAuthReturnPath();
         }
 
         if (! str_starts_with($returnPath, '/')) {
@@ -38,12 +36,7 @@ final class OAuthReturnUrl
         }
 
         if (str_starts_with($returnPath, '//')) {
-            throw new ValidationException(
-                'hub.oauth.return_path must be a relative path starting with / (no scheme or //).',
-                error: 'invalid_return_path',
-                category: 'VALIDATION_ERROR',
-                status: 422,
-            );
+            throw MissingConfigurationException::invalidOAuthReturnPath();
         }
 
         return $request->getSchemeAndHttpHost().$returnPath;

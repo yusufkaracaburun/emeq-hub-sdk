@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Emeq\HubSdk\Exceptions\ValidationException;
+use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Support\HubRouteMiddleware;
 use Emeq\HubSdk\Support\OAuthReturnUrl;
 use Illuminate\Http\Request;
@@ -37,4 +37,17 @@ it('rejects absolute and protocol-relative return paths', function (string $path
     'http://evil.example/phish',
     '//evil.example/phish',
     '\\evil.example',
-])->throws(ValidationException::class);
+])->throws(MissingConfigurationException::class);
+
+it('reports a bad return path as configuration, not caller validation', function (): void {
+    $request = Request::create('https://app.example.test/', 'POST');
+
+    try {
+        OAuthReturnUrl::fromConfigPath($request, 'https://evil.example/phish');
+        expect(false)->toBeTrue('Expected MissingConfigurationException');
+    } catch (MissingConfigurationException $e) {
+        // 503, not 422: the API caller cannot fix the consumer's config.
+        expect($e->status)->toBe(503)
+            ->and($e->category)->toBe('CONFIGURATION_ERROR');
+    }
+});
