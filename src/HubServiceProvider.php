@@ -85,9 +85,9 @@ class HubServiceProvider extends PackageServiceProvider
 
         $name = (string) $config->get('hub.webhook.name', 'emeq-hub');
         $entry = SpatieWebhookClientConfig::make(
+            signingSecret: (string) $config->get('hub.webhook.secret', ''),
             profileClass: (string) $config->get('hub.webhook.profile', HubWebhookProfile::class),
             jobClass: (string) $config->get('hub.webhook.job', ProcessHubWebhookJob::class),
-            signingSecret: (string) $config->get('hub.webhook.secret', ''),
             name: $name,
         );
 

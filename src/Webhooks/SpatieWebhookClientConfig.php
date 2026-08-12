@@ -10,6 +10,9 @@ use Spatie\WebhookClient\WebhookResponse\DefaultRespondsTo;
 
 /**
  * Build a Spatie webhook-client config entry for Hub inbound webhooks.
+ *
+ * Pure: reads no global state, so it can be called before the container is
+ * booted. HubServiceProvider owns the config lookups.
  */
 final class SpatieWebhookClientConfig
 {
@@ -17,14 +20,14 @@ final class SpatieWebhookClientConfig
      * @return array<string, mixed>
      */
     public static function make(
+        string $signingSecret,
         string $profileClass = HubWebhookProfile::class,
         string $jobClass = ProcessHubWebhookJob::class,
-        ?string $signingSecret = null,
         string $name = 'emeq-hub',
     ): array {
         return [
             'name' => $name,
-            'signing_secret' => $signingSecret ?? (string) config('hub.webhook.secret', ''),
+            'signing_secret' => $signingSecret,
             'signature_header_name' => HubWebhookHeaders::SIGNATURE,
             'signature_validator' => DefaultSignatureValidator::class,
             'webhook_profile' => $profileClass,

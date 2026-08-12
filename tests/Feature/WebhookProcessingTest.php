@@ -61,12 +61,14 @@ function makeWebhookCall(array $overrides = []): WebhookCall
     return $call->fresh();
 }
 
-test('spatie config uses hub.webhook.secret from config', function () {
-    config()->set('hub.webhook.secret', 'from-config');
+test('spatie config entry is built from its arguments, not global config', function () {
+    // Reading config() from here would make the builder unusable before boot.
+    // HubServiceProvider owns the lookups; WebhookClientConfigTest covers that.
+    config()->set('hub.webhook.secret', 'ignored-global');
 
-    $entry = SpatieWebhookClientConfig::make();
+    $entry = SpatieWebhookClientConfig::make(signingSecret: 'passed-in');
 
-    expect($entry['signing_secret'])->toBe('from-config')
+    expect($entry['signing_secret'])->toBe('passed-in')
         ->and($entry['name'])->toBe('emeq-hub')
         ->and($entry['webhook_profile'])->toBe(HubWebhookProfile::class)
         ->and($entry['process_webhook_job'])->toBe(ProcessHubWebhookJob::class)
