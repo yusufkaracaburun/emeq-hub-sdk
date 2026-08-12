@@ -15,6 +15,7 @@ use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 use Spatie\WebhookClient\Models\WebhookCall;
 use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
 
@@ -211,6 +212,40 @@ test('serializes hub webhook by ids round-trips', function () {
     expect($restored->accountId)->toBe('42')
         ->and($restored->webhookCallId)->toBe((int) $call->getKey())
         ->and($restored->webhookCall->id)->toBe((int) $call->getKey());
+});
+
+test('a failed job records its exception so the redelivery is not deduplicated', function () {
+    // Regression: alreadyProcessed() treats any earlier row with a null
+    // exception as handled, but nothing wrote that column from the queued
+    // path — so a crashed webhook silently suppressed its own redelivery.
+    Event::fake([HubWebhookReceived::class]);
+
+    $first = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-retry']],
+    ]);
+
+    (new ProcessHubWebhookJob($first))->failed(new RuntimeException('boom'));
+
+    expect($first->fresh()->exception)->not->toBeNull();
+
+    $redelivery = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-retry']],
+    ]);
+
+    (new ProcessHubWebhookJob($redelivery))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+});
+
+test('a successfully processed call still deduplicates its redelivery', function () {
+    Event::fake([HubWebhookReceived::class]);
+
+    makeWebhookCall(['headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-ok']]]);
+    $redelivery = makeWebhookCall(['headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-ok']]]);
+
+    (new ProcessHubWebhookJob($redelivery))->handle();
+
+    Event::assertNotDispatched(HubWebhookReceived::class);
 });
 
 test('a restored by-ids job reloads the stripped webhook call and still processes', function () {

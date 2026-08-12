@@ -7,9 +7,12 @@ namespace Emeq\HubSdk\Webhooks;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
+use Exception;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 use Spatie\WebhookClient\Models\WebhookCall;
+use Throwable;
 
 /**
  * Shared Hub webhook processing: context bind → reload → dedupe → event dispatch.
@@ -20,6 +23,14 @@ use Spatie\WebhookClient\Models\WebhookCall;
  */
 class ProcessHubWebhookJob extends ProcessWebhookJob
 {
+    /**
+     * Explicit retry policy: without one the package inherits whatever the
+     * host's queue worker was started with, which is not a contract.
+     */
+    public int $tries = 3;
+
+    public int $backoff = 30;
+
     public string $accountId = '';
 
     public int $webhookCallId = 0;
@@ -90,6 +101,30 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             }
 
             $this->processEnvelope($envelope, $eventId, $requestId);
+        } finally {
+            $this->releaseAccountContext();
+        }
+    }
+
+    /**
+     * Records the failure on the webhook_calls row.
+     *
+     * Spatie only writes `exception` from the synchronous request path, so
+     * without this a crashed job leaves the column null — and alreadyProcessed()
+     * would then read that row as "handled" and drop Hub's redelivery.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        if ($exception === null || ! $this->bindAccountContext($this->accountId)) {
+            return;
+        }
+
+        try {
+            $this->resolveWebhookCall()?->saveException(
+                $exception instanceof Exception
+                    ? $exception
+                    : new RuntimeException($exception->getMessage(), (int) $exception->getCode(), $exception),
+            );
         } finally {
             $this->releaseAccountContext();
         }
