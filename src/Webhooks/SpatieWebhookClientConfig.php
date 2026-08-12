@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Webhooks;
 
+use Spatie\WebhookClient\Models\WebhookCall;
 use Spatie\WebhookClient\SignatureValidator\DefaultSignatureValidator;
 use Spatie\WebhookClient\WebhookResponse\DefaultRespondsTo;
-use Spatie\WebhookClient\Models\WebhookCall;
 
 /**
  * Build a Spatie webhook-client config entry for Hub inbound webhooks.
@@ -24,7 +24,7 @@ final class SpatieWebhookClientConfig
     ): array {
         return [
             'name' => $name,
-            'signing_secret' => $signingSecret ?? env('EMEQ_HUB_WEBHOOK_SECRET'),
+            'signing_secret' => $signingSecret ?? (string) config('hub.webhook_secret', ''),
             'signature_header_name' => HubWebhookHeaders::SIGNATURE,
             'signature_validator' => DefaultSignatureValidator::class,
             'webhook_profile' => $profileClass,

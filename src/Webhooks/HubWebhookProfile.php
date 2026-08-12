@@ -18,8 +18,7 @@ class HubWebhookProfile implements WebhookProfile
 {
     public function __construct(
         private ResolvesWebhookAccount $accounts,
-    ) {
-    }
+    ) {}
 
     public function shouldProcess(Request $request): bool
     {

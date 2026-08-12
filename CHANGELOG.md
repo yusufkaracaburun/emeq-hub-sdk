@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.0] — 2026-08-12
+
+### Added
+
+- Publishable Spatie `webhook_calls` migration (`--tag=hub-migrations`).
+- Publishable `webhook-client.php` stub (`--tag=hub-webhook-client`).
+- `php artisan hub:install` (config + migrations + webhook-client + checklist).
+- Domain events: `HubWebhookReceived`, `HubConnectionRevoked`, `HubWebhookIgnored`.
+- Explicit `illuminate/{http,routing,database}` requirements.
+- `.gitattributes` export-ignore for tests/tooling.
+- Branch alias `dev-master` → `0.5.x-dev`.
+
+### Changed
+
+- Package short name `hub` → publish tags `hub-config` / `hub-migrations`
+  (was `hub-sdk-*` on 0.4.0).
+- `SpatieWebhookClientConfig` reads `config('hub.webhook_secret')` (config:cache-safe).
+- Webhook dedupe uses JSON header query instead of loading all prior rows.
+- `SerializesHubWebhookByIds` no longer serializes the transient queue `job`.
+- Routes file renamed to `routes/hub.php`.
+- README / AI prompt require `^0.5`.
+
 ## [0.4.0] — 2026-08-12
 
 ### Added

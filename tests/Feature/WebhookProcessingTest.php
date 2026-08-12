@@ -1,0 +1,242 @@
+<?php
+
+declare(strict_types=1);
+
+use Emeq\HubSdk\Contracts\ResolvesWebhookAccount;
+use Emeq\HubSdk\Events\HubConnectionRevoked;
+use Emeq\HubSdk\Events\HubWebhookIgnored;
+use Emeq\HubSdk\Events\HubWebhookReceived;
+use Emeq\HubSdk\Webhooks\HubWebhookEvent;
+use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
+use Emeq\HubSdk\Webhooks\HubWebhookProfile;
+use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
+use Emeq\HubSdk\Webhooks\SerializesHubWebhookByIds;
+use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
+use Spatie\WebhookClient\Models\WebhookCall;
+use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
+
+beforeEach(function () {
+    config()->set('hub.webhook_secret', 'test-webhook-secret');
+
+    Schema::dropIfExists('webhook_calls');
+    Schema::create('webhook_calls', function ($table) {
+        $table->bigIncrements('id');
+        $table->string('name');
+        $table->string('url', 512);
+        $table->json('headers')->nullable();
+        $table->json('payload')->nullable();
+        $table->json('attachments')->nullable();
+        $table->text('exception')->nullable();
+        $table->timestamps();
+    });
+});
+
+function makeWebhookCall(array $overrides = []): WebhookCall
+{
+    $call = new WebhookCall;
+    $call->forceFill(array_merge([
+        'name' => 'emeq-hub',
+        'url' => 'https://consumer.test/webhooks/emeq-hub',
+        'headers' => [
+            strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-1'],
+            strtolower(HubWebhookHeaders::REQUEST_ID) => ['req-1'],
+        ],
+        'payload' => [
+            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'occurred_at' => '2026-08-12T10:00:00+00:00',
+            'data' => ['connection_id' => 'c1'],
+        ],
+        'exception' => null,
+    ], $overrides));
+    $call->save();
+
+    return $call->fresh();
+}
+
+test('spatie config uses hub.webhook_secret from config', function () {
+    config()->set('hub.webhook_secret', 'from-config');
+
+    $entry = SpatieWebhookClientConfig::make();
+
+    expect($entry['signing_secret'])->toBe('from-config')
+        ->and($entry['name'])->toBe('emeq-hub')
+        ->and($entry['webhook_profile'])->toBe(HubWebhookProfile::class)
+        ->and($entry['process_webhook_job'])->toBe(ProcessHubWebhookJob::class)
+        ->and($entry['signature_header_name'])->toBe(HubWebhookHeaders::SIGNATURE);
+});
+
+test('profile skips invalid json and missing account', function () {
+    $this->app->instance(ResolvesWebhookAccount::class, new class implements ResolvesWebhookAccount
+    {
+        public function prepare(string $accountId): bool
+        {
+            return true;
+        }
+    });
+
+    /** @var WebhookProfile $profile */
+    $profile = $this->app->make(HubWebhookProfile::class);
+
+    expect($profile->shouldProcess(Request::create('/', 'POST', content: '{')))->toBeFalse();
+    expect($profile->shouldProcess(Request::create('/', 'POST', content: '{"event":"x"}')))->toBeFalse();
+});
+
+test('profile delegates prepare to ResolvesWebhookAccount', function () {
+    $resolver = new class implements ResolvesWebhookAccount
+    {
+        public ?string $seen = null;
+
+        public function prepare(string $accountId): bool
+        {
+            $this->seen = $accountId;
+
+            return $accountId === '42';
+        }
+    };
+    $this->app->instance(ResolvesWebhookAccount::class, $resolver);
+
+    /** @var HubWebhookProfile $profile */
+    $profile = $this->app->make(HubWebhookProfile::class);
+    $body = json_encode([
+        'event' => HubWebhookEvent::CONNECTION_REVOKED,
+        'provider' => 'exact',
+        'account_id' => '42',
+        'data' => [],
+    ], JSON_THROW_ON_ERROR);
+
+    expect($profile->shouldProcess(Request::create('/', 'POST', content: $body)))->toBeTrue()
+        ->and($resolver->seen)->toBe('42');
+});
+
+test('job dispatches connection revoked events', function () {
+    Event::fake([HubWebhookReceived::class, HubConnectionRevoked::class, HubWebhookIgnored::class]);
+
+    $call = makeWebhookCall();
+    $job = new ProcessHubWebhookJob($call);
+    $job->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+    Event::assertDispatched(HubConnectionRevoked::class);
+    Event::assertNotDispatched(HubWebhookIgnored::class);
+});
+
+test('job dispatches ignored for other events', function () {
+    Event::fake([HubWebhookReceived::class, HubConnectionRevoked::class, HubWebhookIgnored::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::DOCUMENT_SYNCED,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+    (new ProcessHubWebhookJob($call))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+    Event::assertDispatched(HubWebhookIgnored::class);
+    Event::assertNotDispatched(HubConnectionRevoked::class);
+});
+
+test('job deduplicates by event id', function () {
+    Event::fake([HubWebhookReceived::class]);
+
+    makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-dup']],
+        'payload' => [
+            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    $second = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-dup']],
+        'payload' => [
+            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    (new ProcessHubWebhookJob($second))->handle();
+
+    Event::assertNotDispatched(HubWebhookReceived::class);
+});
+
+test('job skips when account id empty', function () {
+    Event::fake([HubWebhookReceived::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'provider' => 'exact',
+            'account_id' => '',
+            'data' => [],
+        ],
+    ]);
+    // Envelope would be null if we went through tryFromArray with empty account —
+    // accountIdForHandle reads payload before that; empty string aborts early.
+    (new ProcessHubWebhookJob($call))->handle();
+
+    Event::assertNotDispatched(HubWebhookReceived::class);
+});
+
+test('serializes hub webhook by ids round-trips', function () {
+    $call = makeWebhookCall();
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        use SerializesHubWebhookByIds;
+    };
+
+    $payload = $job->__serialize();
+    expect($payload)->not->toHaveKey('job')
+        ->and($payload['accountId'])->toBe('42')
+        ->and($payload['webhookCallId'])->toBe((int) $call->getKey());
+
+    $restored = new class(new WebhookCall) extends ProcessHubWebhookJob
+    {
+        use SerializesHubWebhookByIds;
+    };
+    $restored->__unserialize($payload);
+
+    expect($restored->accountId)->toBe('42')
+        ->and($restored->webhookCallId)->toBe((int) $call->getKey())
+        ->and($restored->webhookCall->id)->toBe((int) $call->getKey());
+});
+
+test('hub webhook event constants match hub canonical vocabulary', function () {
+    $expected = [
+        'accounting.bank_statement.changed',
+        'accounting.cash_statement.changed',
+        'accounting.relation.changed',
+        'accounting.sales_invoice.changed',
+        'accounting.document.synced',
+        'billing.payment.changed',
+        'billing.subscription.changed',
+        'connection.revoked',
+        'unmapped',
+    ];
+
+    $actual = [
+        HubWebhookEvent::BANK_STATEMENT_CHANGED,
+        HubWebhookEvent::CASH_STATEMENT_CHANGED,
+        HubWebhookEvent::RELATION_CHANGED,
+        HubWebhookEvent::SALES_INVOICE_CHANGED,
+        HubWebhookEvent::DOCUMENT_SYNCED,
+        HubWebhookEvent::PAYMENT_CHANGED,
+        HubWebhookEvent::SUBSCRIPTION_CHANGED,
+        HubWebhookEvent::CONNECTION_REVOKED,
+        HubWebhookEvent::UNMAPPED,
+    ];
+
+    expect($actual)->toBe($expected);
+});

@@ -8,7 +8,7 @@ use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Support\HubRouteMiddleware;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Support\Facades\Route;
+use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -17,8 +17,26 @@ class HubServiceProvider extends PackageServiceProvider
     public function configurePackage(Package $package): void
     {
         $package
-            ->name('hub-sdk')
-            ->hasConfigFile('hub');
+            ->name('hub')
+            ->hasConfigFile('hub')
+            // Publish-only — do not auto-load (multi-DB consumers pick the connection).
+            ->hasMigration('create_webhook_calls_table')
+            ->hasInstallCommand(function (InstallCommand $command): void {
+                $command
+                    ->publishConfigFile()
+                    ->publishMigrations()
+                    ->publish('webhook-client')
+                    ->endWith(function (InstallCommand $command): void {
+                        $command->info('Next steps:');
+                        $command->line('1. Set EMEQ_HUB_* in .env (BASE, PAT, WEBHOOK_SECRET, …)');
+                        $command->line('2. Bind ResolvesAccountId (+ optional ResolvesAccountDisplayName)');
+                        $command->line('3. Bind ResolvesWebhookAccount for inbound Hub webhooks');
+                        $command->line('4. Route::webhooks(\'webhooks/emeq-hub\', \'emeq-hub\') + CSRF except');
+                        $command->line('5. Migrate webhook_calls on the webhook DB (tenant DB if multi-DB)');
+                        $command->line('6. Listen for HubConnectionRevoked / HubWebhookReceived / HubWebhookIgnored');
+                        $command->line('7. Multi-DB: subclass ProcessHubWebhookJob + SerializesHubWebhookByIds');
+                    });
+            });
     }
 
     public function packageRegistered(): void
@@ -46,6 +64,12 @@ class HubServiceProvider extends PackageServiceProvider
 
     public function packageBooted(): void
     {
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                $this->package->basePath('/../config/webhook-client.php.stub') => config_path('webhook-client.php'),
+            ], 'hub-webhook-client');
+        }
+
         if (! (bool) config('hub.routes.enabled', false)) {
             return;
         }
@@ -53,8 +77,6 @@ class HubServiceProvider extends PackageServiceProvider
         $middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
         HubRouteMiddleware::assertNotEmpty($middleware);
 
-        Route::group([], function (): void {
-            $this->loadRoutesFrom(__DIR__.'/../routes/integrations.php');
-        });
+        $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
     }
 }

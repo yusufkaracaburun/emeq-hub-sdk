@@ -50,8 +50,9 @@ return [
     | Integration BFF routes (opt-in)
     |--------------------------------------------------------------------------
     |
-    | Registers GET/POST/DELETE …/integrations under your auth middleware.
-    | Set middleware to match your app (e.g. api,auth:api or api,auth:sanctum).
+    | Registers GET …/integrations and POST …/integrations/connect-session
+    | under your auth middleware. Set middleware to match your app
+    | (e.g. api,auth:api or api,auth:sanctum).
     |
     */
     'routes' => [

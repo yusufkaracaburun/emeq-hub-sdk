@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+use Emeq\HubSdk\Webhooks\HubWebhookProfile;
+use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
+use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
+
+/*
+|--------------------------------------------------------------------------
+| Spatie webhook-client — Hub inbound
+|--------------------------------------------------------------------------
+|
+| Defaults are fine for single-DB apps. Multi-DB: point `job` at your
+| subclass that binds the tenant DB + uses SerializesHubWebhookByIds.
+| Profile: only override when you need more than ResolvesWebhookAccount.
+|
+| php artisan vendor:publish --tag=hub-webhook-client
+|
+*/
+
+return [
+    'configs' => [
+        SpatieWebhookClientConfig::make(
+            profileClass: HubWebhookProfile::class,
+            jobClass: ProcessHubWebhookJob::class,
+        ),
+    ],
+];

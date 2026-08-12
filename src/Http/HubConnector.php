@@ -17,6 +17,8 @@ use Throwable;
 /**
  * Single Saloon connector for Hub /v1. Provider-agnostic — partner growth
  * happens on the Hub; this client stays on the canonical surface.
+ *
+ * @internal Prefer Facades\Hub / Resources from app code.
  */
 class HubConnector extends Connector
 {

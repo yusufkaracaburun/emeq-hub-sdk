@@ -32,10 +32,10 @@ trait SerializesHubWebhookByIds
      */
     public function __serialize(): array
     {
+        // Omit `job` — the queue worker rebinds it after unserialize.
         return [
             'accountId' => $this->accountId,
             'webhookCallId' => $this->webhookCallId,
-            'job' => $this->job ?? null,
             'connection' => $this->connection,
             'queue' => $this->queue,
             'chainConnection' => $this->chainConnection,
@@ -65,7 +65,7 @@ trait SerializesHubWebhookByIds
         $this->middleware = $data['middleware'] ?? [];
         $this->chained = $data['chained'] ?? [];
 
-        $this->webhookCall = new WebhookCall;
-        $this->webhookCall->id = $this->webhookCallId;
+        $this->webhookCall = new WebhookCall(['id' => $this->webhookCallId]);
+        $this->webhookCall->exists = true;
     }
 }

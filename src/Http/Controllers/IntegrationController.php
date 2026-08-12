@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Log;
  * Connect / disconnect live on Hub's `/connect/{account}` page — consumers
  * mint a session URL and send the user there (single source of truth).
  * Account id is always server-side via ResolvesAccountId — never from the request.
+ *
+ * @internal Package HTTP surface — prefer Facades\Hub / Resources from app code.
  */
 class IntegrationController extends Controller
 {

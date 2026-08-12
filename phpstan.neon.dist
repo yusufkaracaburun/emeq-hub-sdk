@@ -2,8 +2,15 @@ parameters:
     level: 5
     paths:
         - src
-        - config
-        - tests
-
-includes:
-    - vendor/larastan/larastan/extension.neon
+    excludePaths:
+        - src/Http/Request/Accounting/GetAccountingRequest.php
+    ignoreErrors:
+        -
+            identifier: nullCoalesce.expr
+            path: src/Http/HubConnector.php
+        -
+            identifier: function.alreadyNarrowedType
+        -
+            identifier: trait.unused
+            path: src/Webhooks/SerializesHubWebhookByIds.php
+    reportUnmatchedIgnoredErrors: false

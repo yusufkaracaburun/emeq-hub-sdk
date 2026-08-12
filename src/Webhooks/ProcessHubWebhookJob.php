@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Webhooks;
 
+use Emeq\HubSdk\Events\HubConnectionRevoked;
+use Emeq\HubSdk\Events\HubWebhookIgnored;
+use Emeq\HubSdk\Events\HubWebhookReceived;
 use Illuminate\Support\Facades\Log;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 use Spatie\WebhookClient\Models\WebhookCall;
@@ -120,6 +123,8 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ?string $eventId,
         ?string $requestId,
     ): void {
+        event(new HubWebhookReceived($envelope, $eventId, $requestId));
+
         if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) {
             $this->onConnectionRevoked($envelope, $eventId, $requestId);
 
@@ -142,6 +147,8 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             'event_id' => $eventId,
             'data' => $envelope->data,
         ]);
+
+        event(new HubConnectionRevoked($envelope, $eventId, $requestId));
     }
 
     protected function onIgnored(
@@ -156,20 +163,28 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             'request_id' => $requestId,
             'event_id' => $eventId,
         ]);
+
+        event(new HubWebhookIgnored($envelope, $eventId, $requestId));
     }
 
+    /**
+     * Spatie stores Symfony headers (lowercased keys, array values).
+     */
     protected function alreadyProcessed(string $eventId, int $currentId): bool
     {
+        $headerKey = strtolower(HubWebhookHeaders::EVENT_ID);
+
         return WebhookCall::query()
             ->where('name', $this->webhookConfigName())
             ->where('id', '<', $currentId)
             ->whereNull('exception')
-            ->get()
-            ->contains(function (WebhookCall $prior) use ($eventId): bool {
-                $headers = is_array($prior->headers) ? $prior->headers : [];
-
-                return HubWebhookHeaders::eventId($headers) === $eventId;
-            });
+            ->where(function ($query) use ($headerKey, $eventId): void {
+                $query
+                    ->where("headers->{$headerKey}", $eventId)
+                    ->orWhere("headers->{$headerKey}[0]", $eventId)
+                    ->orWhereJsonContains("headers->{$headerKey}", $eventId);
+            })
+            ->exists();
     }
 
     protected function webhookConfigName(): string

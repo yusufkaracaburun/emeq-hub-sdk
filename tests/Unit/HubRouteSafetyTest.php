@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Emeq\HubSdk\Exceptions\ValidationException;
 use Emeq\HubSdk\Support\HubRouteMiddleware;
 use Emeq\HubSdk\Support\OAuthReturnUrl;
-use Emeq\HubSdk\Exceptions\ValidationException;
 use Illuminate\Http\Request;
 
 it('normalizes comma-separated middleware and drops empties', function (): void {

@@ -5,10 +5,10 @@ declare(strict_types=1);
 use Emeq\HubSdk\Exceptions\AuthenticationException;
 use Emeq\HubSdk\Exceptions\NotFoundException;
 use Emeq\HubSdk\Exceptions\ValidationException;
-use Emeq\HubSdk\Hub;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
+use Emeq\HubSdk\Hub;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 

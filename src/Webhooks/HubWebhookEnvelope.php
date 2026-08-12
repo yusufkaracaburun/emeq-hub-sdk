@@ -26,8 +26,7 @@ final class HubWebhookEnvelope
         public readonly string $accountId,
         public readonly ?string $occurredAt,
         public readonly array $data,
-    ) {
-    }
+    ) {}
 
     public static function tryFromRaw(string $rawBody): ?self
     {

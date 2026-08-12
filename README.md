@@ -15,7 +15,15 @@ sites, and inbound webhook wiring.
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.4
+composer require emeq/hub-sdk:^0.5
+```
+
+```bash
+php artisan hub:install
+# or publish selectively:
+php artisan vendor:publish --tag=hub-config
+php artisan vendor:publish --tag=hub-migrations
+php artisan vendor:publish --tag=hub-webhook-client
 ```
 
 ```env
@@ -31,11 +39,18 @@ EMEQ_HUB_ROUTES_MIDDLEWARE=api,auth:sanctum
 EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 ```
 
-Publish config (optional):
+### Checklist
 
-```bash
-php artisan vendor:publish --tag=hub-config
-```
+1. Publish config + migrations + `webhook-client.php` (`hub:install` or tags above).
+2. Set `EMEQ_HUB_*` in `.env`.
+3. Bind `ResolvesAccountId` (+ optional `ResolvesAccountDisplayName`).
+4. Bind `ResolvesWebhookAccount` (tenancy / status gates for inbound webhooks).
+5. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except that path.
+6. Migrate `webhook_calls` on the webhook DB (tenant DB if multi-DB). The package
+   does **not** auto-run migrations.
+7. Listen for `HubConnectionRevoked` / `HubWebhookReceived` / `HubWebhookIgnored`
+   (or override job hooks). Multi-DB: subclass `ProcessHubWebhookJob` +
+   `SerializesHubWebhookByIds`.
 
 The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
 (default `false`). Middleware must be non-empty — empty middleware refuses to boot.
@@ -83,13 +98,29 @@ $this->app->bind(ResolvesAccountDisplayName::class, HubAccountIdResolver::class)
 
 Spatie `webhook-client` bases live in the SDK; apps only wire tenancy + handlers.
 
-1. `config/webhook-client.php` via `SpatieWebhookClientConfig::make(profile:, job:)`.
+1. Publish `config/webhook-client.php` (`--tag=hub-webhook-client`) — uses
+   `SpatieWebhookClientConfig::make()` with default `HubWebhookProfile` /
+   `ProcessHubWebhookJob` (no empty subclasses needed).
 2. Bind `ResolvesWebhookAccount` (`account_id` → tenant; may switch DB).
 3. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except.
-4. Spatie `webhook_calls` migration (per tenant DB if multi-DB).
+4. `php artisan vendor:publish --tag=hub-migrations` then migrate on the webhook DB
+   (tenant DB if multi-DB).
 5. Multi-DB jobs: extend `ProcessHubWebhookJob` + `use SerializesHubWebhookByIds`.
 
-Events: `HubWebhookEvent`. Override `onConnectionRevoked()` / `onIgnored()` for domain logic.
+Signing secret comes from `config('hub.webhook_secret')` (`EMEQ_HUB_WEBHOOK_SECRET`).
+
+**Domain logic:** listen for Laravel events — do not cargo-cult empty profile/job
+subclasses unless you need tenancy hooks:
+
+| Event | When |
+|---|---|
+| `HubWebhookReceived` | Every accepted envelope (before per-event hooks) |
+| `HubConnectionRevoked` | `connection.revoked` |
+| `HubWebhookIgnored` | Other canonical events (default: log only) |
+
+Override `onConnectionRevoked()` / `onIgnored()` on a job subclass if you prefer
+hooks over listeners. Event names: `HubWebhookEvent` (keep in sync with Hub
+`CanonicalEvent`).
 
 ## Usage
 
@@ -110,6 +141,9 @@ Hub::accounting()->capabilities();
 ```
 
 ## API surface
+
+Prefer these from app code: `Facades\Hub`, `Contracts\*`, `Resources\*`,
+`Webhooks\*`, `Events\*`. `Http\*` is package-internal (BFF / Saloon).
 
 | SDK | Hub |
 |---|---|
@@ -192,31 +226,39 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.3
+   composer require emeq/hub-sdk:^0.5
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
    EMEQ_HUB_TIMEOUT=30
+   EMEQ_HUB_WEBHOOK_SECRET=
    EMEQ_HUB_ROUTES=true
    EMEQ_HUB_ROUTES_PREFIX=api
    EMEQ_HUB_ROUTES_MIDDLEWARE={api,auth:sanctum}
    EMEQ_HUB_OAUTH_RETURN_PATH={/settings/integrations?oauth=1}
-3. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
+3. Run `php artisan hub:install` (publishes hub-config, hub-migrations,
+   hub-webhook-client).
+4. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
    (e.g. `App\Integrations\Hub\HubAccountIdResolver`) mapping the current
    tenant to Hub `external_id` per CONTEXT above — server-side only.
    Optionally also implement `ResolvesAccountDisplayName` for Hub account names.
-4. Bind that class in `AppServiceProvider::register()` to
+5. Bind that class in `AppServiceProvider::register()` to
    `ResolvesAccountId::class` (and `ResolvesAccountDisplayName::class` if used).
-5. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
+6. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
    must be non-empty. Do NOT hand-roll Hub HTTP clients or duplicate the
    package BFF routes.
-6. UI: one “Manage integrations” button that POSTs
+7. UI: one “Manage integrations” button that POSTs
    `/{prefix}/integrations/connect-session` and redirects to `response.url`.
    Users connect/disconnect on Hub — do NOT build per-provider OAuth buttons
    or revoke flows in my app.
-7. Optional: GET `/{prefix}/integrations` for a read-only status strip.
+8. Optional: GET `/{prefix}/integrations` for a read-only status strip.
    Do not store tokens, connection state, or provider credentials in my DB.
-8. Errors: HubException subclasses map to JSON on the BFF routes; when calling
+9. Inbound webhooks (if Hub fans out to this app): bind
+   `ResolvesWebhookAccount`, register `Route::webhooks('webhooks/emeq-hub',
+   'emeq-hub')` + CSRF except, migrate `webhook_calls`, listen for
+   `HubConnectionRevoked` (and related Events\*). Use SDK defaults — do not
+   invent a custom HMAC endpoint.
+10. Errors: HubException subclasses map to JSON on the BFF routes; when calling
    Hub yourself, rethrow or map and log `requestId` when set.
 
 DO NOT

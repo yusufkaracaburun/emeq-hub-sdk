@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Facades;
 
-use Emeq\HubSdk\Hub as HubManager;
 use Emeq\HubSdk\Http\HubConnector;
+use Emeq\HubSdk\Hub as HubManager;
 use Emeq\HubSdk\Resources\Accounting;
 use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
