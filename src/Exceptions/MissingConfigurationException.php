@@ -26,6 +26,16 @@ class MissingConfigurationException extends HubException
         );
     }
 
+    public static function missingAccountId(): self
+    {
+        return new self(
+            'Account id is required. Pass it explicitly or bind Emeq\\HubSdk\\Contracts\\ResolvesAccountId.',
+            error: 'missing_account_id',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
     public static function missingAccountResolver(): self
     {
         return new self(

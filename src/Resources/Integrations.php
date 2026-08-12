@@ -7,11 +7,11 @@ namespace Emeq\HubSdk\Resources;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
-use Emeq\HubSdk\Support\DecodesHubJson;
+use Emeq\HubSdk\Support\ResolvesAccountContext;
 
 class Integrations
 {
-    use DecodesHubJson;
+    use ResolvesAccountContext;
 
     public function __construct(
         private readonly HubConnector $connector,
@@ -22,11 +22,14 @@ class Integrations
      * Data-driven provider catalog (+ optional per-account status).
      * New Hub partners appear here without an SDK release.
      *
+     * The account is optional by design: without one Hub returns the bare
+     * catalog, with one it adds per-account connection status.
+     *
      * @return list<array<string, mixed>>
      */
     public function list(?string $accountExternalId = null): array
     {
-        $accountExternalId ??= $this->accountIdResolver?->accountId();
+        $accountExternalId = $this->resolveOptionalAccountId($accountExternalId);
 
         $response = $this->connector->send(new ListIntegrationsRequest($accountExternalId));
 

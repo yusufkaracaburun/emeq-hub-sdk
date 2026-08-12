@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use Emeq\HubSdk\Exceptions\AuthenticationException;
+use Emeq\HubSdk\Exceptions\HubException;
+use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Exceptions\NotFoundException;
 use Emeq\HubSdk\Exceptions\ValidationException;
 use Emeq\HubSdk\Http\HubConnector;
+use Emeq\HubSdk\Http\Request\Accounting\GetAccountingRequest;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
 use Emeq\HubSdk\Hub;
@@ -100,6 +103,57 @@ it('maps validation errors', function (): void {
 
     expect(fn () => app(Hub::class)->oauth()->init('exact', 'tenant-1'))
         ->toThrow(ValidationException::class);
+});
+
+it('sends accounting list requests with account header and query', function (): void {
+    // Regression: GetAccountingRequest promoted a readonly $query property,
+    // which collides with Saloon\Http\Request::$query and fatals at class-load —
+    // every accounting GET was unusable.
+    $mock = new MockClient([
+        GetAccountingRequest::class => MockResponse::make([
+            ['id' => 'doc-1'],
+        ], 200),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    $documents = app(Hub::class)->accounting()->documents(['page' => 2], 'tenant-1');
+
+    expect($documents)->toHaveCount(1);
+
+    $mock->assertSent(function (GetAccountingRequest $request): bool {
+        return $request->resolveEndpoint() === '/accounting/documents'
+            && $request->query()->all() === ['page' => 2];
+    });
+});
+
+it('throws a catchable HubException when no account id can be resolved', function (): void {
+    // No ResolvesAccountId bound and no explicit id: consumers who wrap SDK
+    // calls in catch (HubException) must still catch this.
+    try {
+        app(Hub::class)->accounting()->documents();
+        $this->fail('Expected MissingConfigurationException');
+    } catch (HubException $e) {
+        expect($e)->toBeInstanceOf(MissingConfigurationException::class)
+            ->and($e->error)->toBe('missing_account_id')
+            ->and($e->category)->toBe('CONFIGURATION_ERROR');
+    }
+});
+
+it('lists the integrations catalog without an account id', function (): void {
+    $mock = new MockClient([
+        ListIntegrationsRequest::class => MockResponse::make([
+            ['key' => 'exact', 'label' => 'Exact Online', 'connectable' => true],
+        ], 200),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    expect(app(Hub::class)->integrations()->list())->toHaveCount(1);
+
+    $mock->assertSent(function (ListIntegrationsRequest $request): bool {
+        return $request->query()->all() === [];
+    });
 });
 
 it('maps unknown provider as not found when hub returns 404', function (): void {
