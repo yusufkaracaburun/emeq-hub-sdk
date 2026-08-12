@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.7.1] — 2026-08-12
+
+### Fixed
+
+- **Webhook dedupe was scoped wider than one account.** The cache lock added in
+  0.7.0 was keyed on config name + event id only, so on a cache store shared by
+  all tenants one account's in-flight delivery blocked every other account's
+  delivery of the same event id — and the loser is dropped as
+  `concurrent_delivery`, not retried. `alreadyProcessed()` had the same gap on
+  the single-DB default, where every account reads one `webhook_calls` table.
+  Both halves are now keyed on account id + event id. Correctness no longer
+  rests on Hub minting event ids that are unique across accounts.
+
+  During a rolling deploy old and new workers take different lock keys, so a
+  concurrent redelivery pair split across the two versions falls back to the
+  unlocked check-then-act guard for the length of the rollout.
+
+- **An event id that identifies nothing was treated as an identity.** Hub mints
+  `X-Emeq-Event-Id` per delivery only when the partner supplies one; Snelstart's
+  controller falls back to the literal string `no-id`, so unrelated events all
+  arrive sharing it. The first one then swallowed every later one for that
+  account, and concurrent ones contended on a single lock. Such values are now
+  handled exactly like a missing header — processed, never deduplicated — and
+  the list is configurable through `hub.webhook.opaque_event_ids` (default
+  `['no-id']`) so a change on Hub's side does not need an SDK release. The raw
+  header is still passed to the events for correlation.
+
 ## [0.7.0] — 2026-08-12
 
 Architecture audit follow-up: all 23 findings from

@@ -134,11 +134,17 @@ if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
 $wireValue = $envelope->event->value; // 'connection.revoked'
 ```
 
-Deduplication takes a cache lock per `X-Emeq-Event-Id` so concurrent redeliveries
-cannot both process. That store must support atomic locks: Laravel's `database`
+Deduplication takes a cache lock per account + `X-Emeq-Event-Id` so concurrent
+redeliveries cannot both process, while one event id delivered to two accounts
+still processes twice. That store must support atomic locks: Laravel's `database`
 default needs the framework's `cache_locks` table, or point
 `EMEQ_HUB_WEBHOOK_LOCK_STORE` at redis/memcached. A failed job records its
 exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicate.
+
+Some event ids identify nothing: Hub sends the literal `no-id` when the partner
+omitted an id of its own, so unrelated events share it. Those are processed like
+a webhook with no event id at all — never deduplicated — and the list lives in
+`hub.webhook.opaque_event_ids`.
 
 ## Usage
 

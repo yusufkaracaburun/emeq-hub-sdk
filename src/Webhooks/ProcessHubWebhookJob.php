@@ -11,6 +11,7 @@ use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Exception;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -82,9 +83,12 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             $headers = is_array($call->headers) ? $call->headers : [];
             $eventId = HubWebhookHeaders::eventId($headers);
             $requestId = HubWebhookHeaders::requestId($headers);
+            $dedupeId = $this->deduplicableEventId($eventId);
 
-            if ($eventId === null) {
-                $this->processCall($call, null, $requestId, $accountId);
+            // Still passes the raw event id on for correlation — it is only
+            // useless as an identity, not as a log line.
+            if ($dedupeId === null) {
+                $this->processCall($call, $eventId, $requestId, $accountId);
 
                 return;
             }
@@ -92,7 +96,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             // Dedupe is check-then-act, so two workers holding concurrent
             // redeliveries of one event would both pass it. The lock makes the
             // pair sequential; the loser then sees the winner's row.
-            $lock = $this->deduplicationLock($eventId);
+            $lock = $this->deduplicationLock($dedupeId);
 
             if (! $lock->get()) {
                 Log::info('hub.webhook.deduplicated', [
@@ -106,7 +110,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             }
 
             try {
-                if ($this->alreadyProcessed($eventId, self::keyOf($call))) {
+                if ($this->alreadyProcessed($dedupeId, self::keyOf($call))) {
                     Log::info('hub.webhook.deduplicated', [
                         'event_id' => $eventId,
                         'account_id' => $accountId,
@@ -182,11 +186,35 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
     }
 
     /**
-     * Scoped per webhook config so two Hub configs cannot block each other.
+     * The event id to deduplicate on, or null when the header carries no usable
+     * identity.
+     *
+     * Hub mints an id per delivery, but only when the partner supplies one:
+     * Snelstart's controller falls back to the literal string `no-id`, so many
+     * unrelated events arrive sharing it. Treating that as an identity makes the
+     * first one swallow all the rest. Configure further sentinels through
+     * `hub.webhook.opaque_event_ids` — they are handled exactly like a missing
+     * header: processed, never deduplicated.
+     */
+    protected function deduplicableEventId(?string $eventId): ?string
+    {
+        if ($eventId === null) {
+            return null;
+        }
+
+        $opaque = Config::array('hub.webhook.opaque_event_ids', ['no-id']);
+
+        return in_array($eventId, $opaque, true) ? null : $eventId;
+    }
+
+    /**
+     * Scoped per webhook config so two Hub configs cannot block each other, and
+     * per account so the lock is no wider than the guard it protects: two
+     * accounts delivered one event id must not skip each other as duplicates.
      */
     protected function deduplicationLockKey(string $eventId): string
     {
-        return 'hub-webhook:'.$this->webhookConfigName().':'.$eventId;
+        return 'hub-webhook:'.$this->webhookConfigName().':'.$this->accountId.':'.$eventId;
     }
 
     /**
@@ -302,9 +330,31 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             ->where('id', '<', $currentId)
             ->whereNull('exception');
 
+        $this->whereAccountId($query);
         HubWebhookHeaders::whereEventId($query, $eventId);
 
         return $query->exists();
+    }
+
+    /**
+     * Multi-DB consumers already read a per-tenant table, but the single-DB
+     * default shares one — so without this the event id alone decides, and one
+     * account's delivery deduplicates another's.
+     *
+     * @param  Builder<WebhookCall>  $query
+     */
+    private function whereAccountId(Builder $query): void
+    {
+        $accountId = $this->accountId;
+
+        $query->where(function (Builder $query) use ($accountId): void {
+            $query->where('payload->account_id', $accountId);
+
+            // SQLite compares a JSON number against a bound string as unequal.
+            if (ctype_digit($accountId)) {
+                $query->orWhere('payload->account_id', (int) $accountId);
+            }
+        });
     }
 
     protected function webhookConfigName(): string

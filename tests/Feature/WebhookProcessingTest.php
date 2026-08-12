@@ -240,6 +240,61 @@ test('a failed job records its exception so the redelivery is not deduplicated',
     Event::assertDispatched(HubWebhookReceived::class);
 });
 
+test('an opaque event id identifies nothing and is never deduplicated', function () {
+    // Hub sends the literal 'no-id' when the partner omitted an id of its own
+    // (Snelstart), so unrelated events share it. Deduplicating on that value
+    // made the first delivery swallow every later one for that account.
+    Event::fake([HubWebhookReceived::class]);
+
+    makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['no-id']],
+    ]);
+
+    $second = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['no-id']],
+    ]);
+
+    (new ProcessHubWebhookJob($second))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+});
+
+test('an opaque event id takes no lock, so concurrent deliveries both process', function () {
+    Event::fake([HubWebhookReceived::class]);
+
+    $call = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['no-id']],
+    ]);
+
+    // Whatever key another worker might hold, an opaque id must not contend.
+    $held = Cache::lock('hub-webhook:emeq-hub:42:no-id', 30);
+    expect($held->get())->toBeTrue();
+
+    (new ProcessHubWebhookJob($call))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+
+    $held->release();
+});
+
+test('the opaque list is configurable', function () {
+    config()->set('hub.webhook.opaque_event_ids', ['no-id', 'placeholder']);
+
+    Event::fake([HubWebhookReceived::class]);
+
+    makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['placeholder']],
+    ]);
+
+    $second = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['placeholder']],
+    ]);
+
+    (new ProcessHubWebhookJob($second))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+});
+
 test('a concurrent delivery of the same event id is skipped, not raced', function () {
     Event::fake([HubWebhookReceived::class]);
 
@@ -250,7 +305,7 @@ test('a concurrent delivery of the same event id is skipped, not raced', functio
     $job = new ProcessHubWebhookJob($call);
 
     // Stand in for the worker that got there first and still holds the lock.
-    $held = Cache::lock('hub-webhook:emeq-hub:evt-concurrent', 30);
+    $held = Cache::lock('hub-webhook:emeq-hub:42:evt-concurrent', 30);
     expect($held->get())->toBeTrue();
 
     $job->handle();
@@ -258,6 +313,65 @@ test('a concurrent delivery of the same event id is skipped, not raced', functio
     Event::assertNotDispatched(HubWebhookReceived::class);
 
     $held->release();
+});
+
+test('a delivery for another account is not deduplicated against the first', function () {
+    // Regression: both halves of the guard were keyed on the event id alone —
+    // the cache lock globally, and alreadyProcessed() on a webhook_calls table
+    // that single-DB consumers share across accounts. Two accounts delivered
+    // one event id dropped the second as a duplicate.
+    Event::fake([HubWebhookReceived::class]);
+
+    makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-shared']],
+    ]);
+
+    $other = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-shared']],
+        'payload' => [
+            'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
+            'provider' => 'exact',
+            'account_id' => '99',
+            'data' => [],
+        ],
+    ]);
+
+    // The unscoped key account 42's worker used to take: it must not block 99.
+    $held = Cache::lock('hub-webhook:emeq-hub:evt-shared', 30);
+    expect($held->get())->toBeTrue();
+
+    (new ProcessHubWebhookJob($other))->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+
+    $held->release();
+});
+
+test('a numeric account id in the payload still deduplicates its redelivery', function () {
+    // json_extract hands SQLite an integer, so the account filter has to match
+    // a JSON number as well as a JSON string or dedupe silently stops firing.
+    Event::fake([HubWebhookReceived::class]);
+
+    $payload = [
+        'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
+        'provider' => 'exact',
+        'account_id' => 42,
+        'data' => [],
+    ];
+
+    makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-numeric']],
+        'payload' => $payload,
+    ]);
+
+    $redelivery = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-numeric']],
+        'payload' => $payload,
+    ]);
+
+    (new ProcessHubWebhookJob($redelivery))->handle();
+
+    Event::assertNotDispatched(HubWebhookReceived::class);
 });
 
 test('a successfully processed call still deduplicates its redelivery', function () {
