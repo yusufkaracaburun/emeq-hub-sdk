@@ -277,23 +277,19 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
     }
 
     /**
-     * Spatie stores Symfony headers (lowercased keys, array values).
+     * An earlier call with this event id that did not record an exception —
+     * i.e. one that ran to completion.
      */
     protected function alreadyProcessed(string $eventId, int $currentId): bool
     {
-        $headerKey = strtolower(HubWebhookHeaders::EVENT_ID);
-
-        return WebhookCall::query()
+        $query = WebhookCall::query()
             ->where('name', $this->webhookConfigName())
             ->where('id', '<', $currentId)
-            ->whereNull('exception')
-            ->where(function ($query) use ($headerKey, $eventId): void {
-                $query
-                    ->where("headers->{$headerKey}", $eventId)
-                    ->orWhere("headers->{$headerKey}[0]", $eventId)
-                    ->orWhereJsonContains("headers->{$headerKey}", $eventId);
-            })
-            ->exists();
+            ->whereNull('exception');
+
+        HubWebhookHeaders::whereEventId($query, $eventId);
+
+        return $query->exists();
     }
 
     protected function webhookConfigName(): string

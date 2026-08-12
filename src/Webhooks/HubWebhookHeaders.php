@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Webhooks;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
 /**
  * Correlation / dedupe headers Hub sets on outbound consumer webhooks.
+ *
+ * Owns how Spatie persists them: Symfony lowercases header keys and stores
+ * each value as an array. Both the PHP readers and the query builder below
+ * derive from that one fact.
  */
 final class HubWebhookHeaders
 {
@@ -51,6 +58,25 @@ final class HubWebhookHeaders
         }
 
         return null;
+    }
+
+    /**
+     * Query counterpart of {@see self::eventId()} — same knowledge about how
+     * Spatie persists the header (lowercased key, value stored as an array),
+     * expressed once for the database side.
+     *
+     * @param  Builder<covariant Model>  $query
+     */
+    public static function whereEventId(Builder $query, string $eventId): void
+    {
+        $key = strtolower(self::EVENT_ID);
+
+        $query->where(function (Builder $query) use ($key, $eventId): void {
+            $query
+                ->where("headers->{$key}", $eventId)
+                ->orWhere("headers->{$key}[0]", $eventId)
+                ->orWhereJsonContains("headers->{$key}", $eventId);
+        });
     }
 
     /**
