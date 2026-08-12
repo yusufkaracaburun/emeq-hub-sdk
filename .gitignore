@@ -12,3 +12,5 @@
 .claude/settings.local.json
 # Junie requires absolute paths in its MCP config — machine-specific.
 .junie/mcp/mcp.json
+# graphify's cache keys on absolute paths and mtimes — machine-specific.
+/graphify-out
