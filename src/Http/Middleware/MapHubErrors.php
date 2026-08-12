@@ -4,31 +4,24 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Http\Middleware;
 
-use Emeq\HubSdk\Exceptions\HubException;
+use Emeq\HubSdk\Http\HubErrorResponse;
 use Saloon\Contracts\ResponseMiddleware;
 use Saloon\Http\Response;
 
 /**
- * Ensures failed Hub responses throw typed HubException subclasses.
- * Saloon already maps via Connector::getRequestException when throw is used;
- * this middleware covers send() without AlwaysThrowOnErrors for clarity.
+ * Throws typed HubException subclasses on failed Hub responses.
+ *
+ * This is the live path: it runs on every response from send(), before Saloon
+ * would reach Connector::getRequestException() (which only fires via
+ * $response->throw() or the AlwaysThrowOnErrors trait). Both decode through
+ * {@see HubErrorResponse}.
  */
 class MapHubErrors implements ResponseMiddleware
 {
     public function __invoke(Response $response): Response
     {
         if ($response->failed()) {
-            $body = [];
-
-            try {
-                /** @var array<string, mixed>|null $decoded */
-                $decoded = $response->json();
-                $body = is_array($decoded) ? $decoded : [];
-            } catch (\Throwable) {
-                $body = ['message' => $response->body()];
-            }
-
-            throw HubException::fromEnvelope($body, $response->status());
+            throw HubErrorResponse::toException($response);
         }
 
         return $response;

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Http;
 
-use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Http\Middleware\MapHubErrors;
 use Saloon\Contracts\Authenticator;
@@ -65,19 +64,13 @@ class HubConnector extends Connector
         ];
     }
 
+    /**
+     * Reached only via $response->throw() on the public connector() escape hatch —
+     * MapHubErrors throws first on the normal send() path.
+     */
     public function getRequestException(Response $response, ?Throwable $senderException): ?Throwable
     {
-        $body = [];
-
-        try {
-            /** @var array<string, mixed> $decoded */
-            $decoded = $response->json() ?? [];
-            $body = is_array($decoded) ? $decoded : [];
-        } catch (Throwable) {
-            $body = ['message' => $response->body()];
-        }
-
-        return HubException::fromEnvelope($body, $response->status(), $senderException);
+        return HubErrorResponse::toException($response, $senderException);
     }
 
     public function boot(PendingRequest $pendingRequest): void
