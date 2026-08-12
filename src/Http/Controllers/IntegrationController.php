@@ -8,7 +8,7 @@ use Emeq\HubSdk\Contracts\ResolvesAccountDisplayName;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
-use Emeq\HubSdk\Facades\Hub;
+use Emeq\HubSdk\Hub;
 use Emeq\HubSdk\Support\OAuthReturnUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +26,16 @@ use Illuminate\Support\Facades\Log;
  */
 class IntegrationController extends Controller
 {
+    /**
+     * The two resolvers are consumer bindings and may be absent; the container
+     * injects null for an unbound interface that has a default.
+     */
+    public function __construct(
+        private readonly Hub $hub,
+        private readonly ?ResolvesAccountId $accountIdResolver = null,
+        private readonly ?ResolvesAccountDisplayName $displayNameResolver = null,
+    ) {}
+
     public function index(): JsonResponse
     {
         try {
@@ -33,7 +43,7 @@ class IntegrationController extends Controller
             // not usable at all without a bound resolver.
             $this->assertAccountResolverBound();
 
-            return response()->json(Hub::integrations()->list());
+            return response()->json($this->hub->integrations()->list());
         } catch (HubException $e) {
             return $this->hubError($e);
         }
@@ -50,11 +60,9 @@ class IntegrationController extends Controller
                 $request,
                 (string) config('hub.oauth.return_path', ''),
             );
-            $displayName = app()->bound(ResolvesAccountDisplayName::class)
-                ? app(ResolvesAccountDisplayName::class)->displayName()
-                : null;
+            $displayName = $this->displayNameResolver?->displayName();
 
-            $session = Hub::connectSessions()->create(
+            $session = $this->hub->connectSessions()->create(
                 accountExternalId: $externalId,
                 displayName: $displayName,
                 returnUrl: $returnUrl,
@@ -73,12 +81,15 @@ class IntegrationController extends Controller
     {
         $this->assertAccountResolverBound();
 
-        return app(ResolvesAccountId::class)->accountId();
+        return $this->accountIdResolver->accountId();
     }
 
+    /**
+     * @phpstan-assert !null $this->accountIdResolver
+     */
     private function assertAccountResolverBound(): void
     {
-        if (! app()->bound(ResolvesAccountId::class)) {
+        if ($this->accountIdResolver === null) {
             throw MissingConfigurationException::missingAccountResolver();
         }
     }
