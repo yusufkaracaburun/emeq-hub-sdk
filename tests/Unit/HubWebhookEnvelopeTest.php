@@ -8,7 +8,7 @@ use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
 
 test('envelope parses hub payload', function () {
     $envelope = HubWebhookEnvelope::tryFromArray([
-        'event' => HubWebhookEvent::CONNECTION_REVOKED,
+        'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
         'provider' => 'exact',
         'account_id' => '42',
         'occurred_at' => '2026-08-12T10:00:00+00:00',

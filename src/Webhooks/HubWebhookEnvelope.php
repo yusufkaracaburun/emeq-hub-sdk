@@ -21,7 +21,7 @@ final class HubWebhookEnvelope
      * @param  array<string, mixed>  $data
      */
     public function __construct(
-        public readonly string $event,
+        public readonly HubWebhookEvent $event,
         public readonly string $provider,
         public readonly string $accountId,
         public readonly ?string $occurredAt,
@@ -53,7 +53,7 @@ final class HubWebhookEnvelope
         $data = $payload['data'] ?? [];
 
         return new self(
-            event: (string) ($payload['event'] ?? HubWebhookEvent::UNMAPPED),
+            event: HubWebhookEvent::fromWire($payload['event'] ?? null),
             provider: (string) ($payload['provider'] ?? ''),
             accountId: (string) $accountId,
             occurredAt: isset($payload['occurred_at']) ? (string) $payload['occurred_at'] : null,
@@ -67,7 +67,7 @@ final class HubWebhookEnvelope
     public function toArray(): array
     {
         return [
-            'event' => $this->event,
+            'event' => $this->event->value,
             'provider' => $this->provider,
             'account_id' => $this->accountId,
             'occurred_at' => $this->occurredAt,

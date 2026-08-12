@@ -249,7 +249,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ?string $requestId,
     ): void {
         Log::info('hub.webhook.connection_revoked', [
-            'event' => $envelope->event,
+            'event' => $envelope->event->value,
             'provider' => $envelope->provider,
             'account_id' => $envelope->accountId,
             'request_id' => $requestId,
@@ -266,7 +266,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ?string $requestId,
     ): void {
         Log::info('hub.webhook.ignored', [
-            'event' => $envelope->event,
+            'event' => $envelope->event->value,
             'provider' => $envelope->provider,
             'account_id' => $envelope->accountId,
             'request_id' => $requestId,

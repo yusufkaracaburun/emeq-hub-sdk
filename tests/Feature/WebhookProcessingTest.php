@@ -6,6 +6,7 @@ use Emeq\HubSdk\Contracts\ResolvesWebhookAccount;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
+use Emeq\HubSdk\Webhooks\HubWebhookEnvelope;
 use Emeq\HubSdk\Webhooks\HubWebhookEvent;
 use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
 use Emeq\HubSdk\Webhooks\HubWebhookProfile;
@@ -47,7 +48,7 @@ function makeWebhookCall(array $overrides = []): WebhookCall
             strtolower(HubWebhookHeaders::REQUEST_ID) => ['req-1'],
         ],
         'payload' => [
-            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
             'provider' => 'exact',
             'account_id' => '42',
             'occurred_at' => '2026-08-12T10:00:00+00:00',
@@ -105,7 +106,7 @@ test('profile delegates prepare to ResolvesWebhookAccount', function () {
     /** @var HubWebhookProfile $profile */
     $profile = $this->app->make(HubWebhookProfile::class);
     $body = json_encode([
-        'event' => HubWebhookEvent::CONNECTION_REVOKED,
+        'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
         'provider' => 'exact',
         'account_id' => '42',
         'data' => [],
@@ -132,7 +133,7 @@ test('job dispatches ignored for other events', function () {
 
     $call = makeWebhookCall([
         'payload' => [
-            'event' => HubWebhookEvent::DOCUMENT_SYNCED,
+            'event' => HubWebhookEvent::DOCUMENT_SYNCED->value,
             'provider' => 'exact',
             'account_id' => '42',
             'data' => [],
@@ -151,7 +152,7 @@ test('job deduplicates by event id', function () {
     makeWebhookCall([
         'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-dup']],
         'payload' => [
-            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
             'provider' => 'exact',
             'account_id' => '42',
             'data' => [],
@@ -161,7 +162,7 @@ test('job deduplicates by event id', function () {
     $second = makeWebhookCall([
         'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-dup']],
         'payload' => [
-            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
             'provider' => 'exact',
             'account_id' => '42',
             'data' => [],
@@ -178,14 +179,14 @@ test('job skips when account id empty', function () {
 
     $call = makeWebhookCall([
         'payload' => [
-            'event' => HubWebhookEvent::CONNECTION_REVOKED,
+            'event' => HubWebhookEvent::CONNECTION_REVOKED->value,
             'provider' => 'exact',
             'account_id' => '',
             'data' => [],
         ],
     ]);
-    // Envelope would be null if we went through tryFromArray with empty account —
-    // accountIdForHandle reads payload before that; empty string aborts early.
+    // The constructor reads account_id off the payload; an empty one aborts
+    // before the envelope is parsed at all.
     (new ProcessHubWebhookJob($call))->handle();
 
     Event::assertNotDispatched(HubWebhookReceived::class);
@@ -310,17 +311,23 @@ test('hub webhook event constants match hub canonical vocabulary', function () {
         'unmapped',
     ];
 
-    $actual = [
-        HubWebhookEvent::BANK_STATEMENT_CHANGED,
-        HubWebhookEvent::CASH_STATEMENT_CHANGED,
-        HubWebhookEvent::RELATION_CHANGED,
-        HubWebhookEvent::SALES_INVOICE_CHANGED,
-        HubWebhookEvent::DOCUMENT_SYNCED,
-        HubWebhookEvent::PAYMENT_CHANGED,
-        HubWebhookEvent::SUBSCRIPTION_CHANGED,
-        HubWebhookEvent::CONNECTION_REVOKED,
-        HubWebhookEvent::UNMAPPED,
-    ];
+    $actual = array_map(
+        static fn (HubWebhookEvent $event): string => $event->value,
+        HubWebhookEvent::cases(),
+    );
 
     expect($actual)->toBe($expected);
+});
+
+test('an event this SDK release does not know decodes to unmapped', function () {
+    // Forward-compatibility: Hub may add canonical events without an SDK
+    // release, so an unknown wire value must not throw.
+    $envelope = HubWebhookEnvelope::tryFromArray([
+        'event' => 'accounting.something.invented.later',
+        'provider' => 'exact',
+        'account_id' => '42',
+        'data' => [],
+    ]);
+
+    expect($envelope?->event)->toBe(HubWebhookEvent::UNMAPPED);
 });
