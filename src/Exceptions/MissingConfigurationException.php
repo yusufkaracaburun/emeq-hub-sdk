@@ -46,6 +46,18 @@ class MissingConfigurationException extends HubException
         );
     }
 
+    public static function webhookLockStoreNotLockable(string $store): self
+    {
+        return new self(
+            "Cache store [{$store}] does not support atomic locks, which Hub webhook "
+            .'deduplication requires. Run the framework cache_locks migration for the '
+            .'database store, or point hub.webhook.lock_store at redis/memcached.',
+            error: 'webhook_lock_store_not_lockable',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
     public static function missingAccountResolver(): self
     {
         return new self(

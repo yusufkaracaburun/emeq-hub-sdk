@@ -45,12 +45,18 @@ return [
     | The service provider upserts this entry into webhook-client.configs.
     | Multi-DB: override `job` / `profile` here — no separate Spatie publish.
     |
+    | `lock_store` names the cache store used to serialize concurrent
+    | redeliveries of one event id. Null uses your default store, which must
+    | support atomic locks: Laravel's `database` default needs the framework's
+    | cache_locks table, so point this at redis/memcached to skip that.
+    |
     */
     'webhook' => [
         'secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
         'name' => 'emeq-hub',
         'profile' => HubWebhookProfile::class,
         'job' => ProcessHubWebhookJob::class,
+        'lock_store' => env('EMEQ_HUB_WEBHOOK_LOCK_STORE'),
     ],
 
     /*

@@ -13,6 +13,7 @@ use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
 use Emeq\HubSdk\Webhooks\SerializesHubWebhookByIds;
 use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -235,6 +236,26 @@ test('a failed job records its exception so the redelivery is not deduplicated',
     (new ProcessHubWebhookJob($redelivery))->handle();
 
     Event::assertDispatched(HubWebhookReceived::class);
+});
+
+test('a concurrent delivery of the same event id is skipped, not raced', function () {
+    Event::fake([HubWebhookReceived::class]);
+
+    $call = makeWebhookCall([
+        'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['evt-concurrent']],
+    ]);
+
+    $job = new ProcessHubWebhookJob($call);
+
+    // Stand in for the worker that got there first and still holds the lock.
+    $held = Cache::lock('hub-webhook:emeq-hub:evt-concurrent', 30);
+    expect($held->get())->toBeTrue();
+
+    $job->handle();
+
+    Event::assertNotDispatched(HubWebhookReceived::class);
+
+    $held->release();
 });
 
 test('a successfully processed call still deduplicates its redelivery', function () {

@@ -7,7 +7,11 @@ namespace Emeq\HubSdk\Webhooks;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
+use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Exception;
+use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
@@ -76,8 +80,20 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             $eventId = HubWebhookHeaders::eventId($headers);
             $requestId = HubWebhookHeaders::requestId($headers);
 
-            if ($eventId !== null && $this->alreadyProcessed($eventId, (int) $call->getKey())) {
+            if ($eventId === null) {
+                $this->processCall($call, null, $requestId, $accountId);
+
+                return;
+            }
+
+            // Dedupe is check-then-act, so two workers holding concurrent
+            // redeliveries of one event would both pass it. The lock makes the
+            // pair sequential; the loser then sees the winner's row.
+            $lock = $this->deduplicationLock($eventId);
+
+            if (! $lock->get()) {
                 Log::info('hub.webhook.deduplicated', [
+                    'reason' => 'concurrent_delivery',
                     'event_id' => $eventId,
                     'account_id' => $accountId,
                     'webhook_call_id' => $call->getKey(),
@@ -86,24 +102,76 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
                 return;
             }
 
-            $envelope = HubWebhookEnvelope::tryFromArray(
-                is_array($call->payload) ? $call->payload : []
-            );
+            try {
+                if ($this->alreadyProcessed($eventId, (int) $call->getKey())) {
+                    Log::info('hub.webhook.deduplicated', [
+                        'event_id' => $eventId,
+                        'account_id' => $accountId,
+                        'webhook_call_id' => $call->getKey(),
+                    ]);
 
-            if ($envelope === null) {
-                Log::info('hub.webhook.skipped', [
-                    'reason' => 'invalid_payload_in_job',
-                    'account_id' => $accountId,
-                    'webhook_call_id' => $call->getKey(),
-                ]);
+                    return;
+                }
 
-                return;
+                $this->processCall($call, $eventId, $requestId, $accountId);
+            } finally {
+                $lock->release();
             }
-
-            $this->processEnvelope($envelope, $eventId, $requestId);
         } finally {
             $this->releaseAccountContext();
         }
+    }
+
+    protected function processCall(
+        WebhookCall $call,
+        ?string $eventId,
+        ?string $requestId,
+        string $accountId,
+    ): void {
+        $envelope = HubWebhookEnvelope::tryFromArray(
+            is_array($call->payload) ? $call->payload : []
+        );
+
+        if ($envelope === null) {
+            Log::info('hub.webhook.skipped', [
+                'reason' => 'invalid_payload_in_job',
+                'account_id' => $accountId,
+                'webhook_call_id' => $call->getKey(),
+            ]);
+
+            return;
+        }
+
+        $this->processEnvelope($envelope, $eventId, $requestId);
+    }
+
+    /**
+     * The configured store must support atomic locks. Refusing here rather than
+     * degrading to an unguarded check keeps the failure visible: the job lands
+     * in failed_jobs with the reason instead of silently racing.
+     *
+     * @throws MissingConfigurationException when the store cannot lock
+     */
+    protected function deduplicationLock(string $eventId): Lock
+    {
+        $configured = config('hub.webhook.lock_store');
+        $name = is_string($configured) && $configured !== '' ? $configured : null;
+
+        $store = Cache::store($name)->getStore();
+
+        if (! $store instanceof LockProvider) {
+            throw MissingConfigurationException::webhookLockStoreNotLockable($name ?? (string) config('cache.default'));
+        }
+
+        return $store->lock($this->deduplicationLockKey($eventId), 30);
+    }
+
+    /**
+     * Scoped per webhook config so two Hub configs cannot block each other.
+     */
+    protected function deduplicationLockKey(string $eventId): string
+    {
+        return 'hub-webhook:'.$this->webhookConfigName().':'.$eventId;
     }
 
     /**
