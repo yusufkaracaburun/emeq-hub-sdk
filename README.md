@@ -46,11 +46,12 @@ EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 
 1. Publish config + migrations (`hub:install` or tags above).
 2. Set `EMEQ_HUB_*` in `.env`.
-3. Bind `ResolvesAccountId` (+ optional `ResolvesAccountDisplayName`).
+3. Bind `ResolvesAccountId` (`accountId()` + `displayName()`).
 4. Bind `ResolvesWebhookAccount` (tenancy / status gates for inbound webhooks).
 5. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except that path.
-6. Migrate `webhook_calls` on the webhook DB (tenant DB if multi-DB). The package
-   does **not** auto-run migrations.
+6. Migrate `webhook_calls` on the webhook DB — **the tenant DB if multi-DB**, see
+   [Connection placement](#connection-placement). The package does **not**
+   auto-run migrations.
 7. Listen for `HubConnectionRevoked` / `HubWebhookReceived` / `HubWebhookIgnored`
    (or override job hooks). Multi-DB: set `hub.webhook.job` (+ `profile`) in
    `config/hub.php` and use `SerializesHubWebhookByIds` on that job.
@@ -76,10 +77,9 @@ The SDK never assumes an app-specific URL.
 Bind your tenant → Hub `external_id` server-side:
 
 ```php
-use Emeq\HubSdk\Contracts\ResolvesAccountDisplayName;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 
-class HubAccountIdResolver implements ResolvesAccountId, ResolvesAccountDisplayName
+class HubAccountIdResolver implements ResolvesAccountId
 {
     public function accountId(): string
     {
@@ -88,13 +88,12 @@ class HubAccountIdResolver implements ResolvesAccountId, ResolvesAccountDisplayN
 
     public function displayName(): ?string
     {
-        return current_tenant_name(); // optional; null is fine
+        return current_tenant_name(); // null is fine — Hub names the account
     }
 }
 
 // AppServiceProvider
 $this->app->bind(ResolvesAccountId::class, HubAccountIdResolver::class);
-$this->app->bind(ResolvesAccountDisplayName::class, HubAccountIdResolver::class);
 ```
 
 ## Inbound Hub webhooks
@@ -113,6 +112,22 @@ into Spatie’s `webhook-client.configs` from `hub.webhook.*`.
    to your subclass that uses `SerializesHubWebhookByIds`.
 
 Signing secret comes from `config('hub.webhook.secret')` (`EMEQ_HUB_WEBHOOK_SECRET`).
+
+### Connection placement
+
+`ProcessHubWebhookJob` binds your account context **first**, then reads
+`webhook_calls` — both `resolveWebhookCall()` and the deduplication query run on
+whatever connection is default *after* `bindAccountContext()`.
+
+So in a multi-DB app:
+
+- `webhook_calls` must live in the **tenant** DB, not the central one.
+- `ResolvesWebhookAccount::prepare()` must switch the connection **before**
+  Spatie stores the call, so the row lands in that same tenant DB.
+
+Getting this wrong fails **silently**: `resolveWebhookCall()` returns `null` and
+every delivery is logged as `hub.webhook.skipped` / `webhook_call_missing` — no
+exception, no failed job, no retry.
 
 **Domain logic:** listen for Laravel events — do not cargo-cult empty profile/job
 subclasses unless you need tenancy hooks:
@@ -143,8 +158,8 @@ exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicat
 
 Some event ids identify nothing: Hub sends the literal `no-id` when the partner
 omitted an id of its own, so unrelated events share it. Those are processed like
-a webhook with no event id at all — never deduplicated — and the list lives in
-`hub.webhook.opaque_event_ids`.
+a webhook with no event id at all — never deduplicated. Override
+`ProcessHubWebhookJob::OPAQUE_EVENT_IDS` in a subclass to recognise more.
 
 ## Usage
 
@@ -281,9 +296,9 @@ DO THIS (in order)
 4. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
    (e.g. `App\Integrations\Hub\HubAccountIdResolver`) mapping the current
    tenant to Hub `external_id` per CONTEXT above — server-side only.
-   Optionally also implement `ResolvesAccountDisplayName` for Hub account names.
+   `displayName()` may return null.
 5. Bind that class in `AppServiceProvider::register()` to
-   `ResolvesAccountId::class` (and `ResolvesAccountDisplayName::class` if used).
+   `ResolvesAccountId::class`.
 6. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
    must be non-empty. Do NOT hand-roll Hub HTTP clients or duplicate the
    package BFF routes.
