@@ -48,9 +48,9 @@ class HubServiceProvider extends PackageServiceProvider
             $config = $app->make('config');
 
             return new HubConnector(
-                baseUrl: (string) $config->get('hub.base_url', ''),
-                pat: (string) $config->get('hub.pat', ''),
-                timeoutSeconds: (int) $config->get('hub.timeout', 30),
+                baseUrl: $config->string('hub.base_url', ''),
+                pat: $config->string('hub.pat', ''),
+                timeoutSeconds: $config->integer('hub.timeout', 30),
             );
         });
 
@@ -83,16 +83,16 @@ class HubServiceProvider extends PackageServiceProvider
         /** @var Repository $config */
         $config = $this->app->make('config');
 
-        $name = (string) $config->get('hub.webhook.name', 'emeq-hub');
+        $name = $config->string('hub.webhook.name', 'emeq-hub');
         $entry = SpatieWebhookClientConfig::make(
-            signingSecret: (string) $config->get('hub.webhook.secret', ''),
-            profileClass: (string) $config->get('hub.webhook.profile', HubWebhookProfile::class),
-            jobClass: (string) $config->get('hub.webhook.job', ProcessHubWebhookJob::class),
+            signingSecret: $config->string('hub.webhook.secret', ''),
+            profileClass: $config->string('hub.webhook.profile', HubWebhookProfile::class),
+            jobClass: $config->string('hub.webhook.job', ProcessHubWebhookJob::class),
             name: $name,
         );
 
         /** @var list<array<string, mixed>> $configs */
-        $configs = array_values($config->get('webhook-client.configs', []));
+        $configs = array_values($config->array('webhook-client.configs', []));
         $replaced = false;
 
         foreach ($configs as $index => $existing) {

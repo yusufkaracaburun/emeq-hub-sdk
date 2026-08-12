@@ -11,7 +11,9 @@ class OAuth extends Resource
     /**
      * Start OAuth for any Hub provider key (no SDK allowlist).
      *
-     * @return array{connection_id: mixed, redirect_url: mixed, ...}
+     * Hub's response is not validated here — read keys defensively.
+     *
+     * @return array<string, mixed>
      */
     public function init(string $provider, ?string $accountExternalId = null, ?string $returnUrl = null): array
     {

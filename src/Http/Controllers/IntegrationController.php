@@ -13,6 +13,7 @@ use Emeq\HubSdk\Support\OAuthReturnUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -58,7 +59,7 @@ class IntegrationController extends Controller
             $externalId = $this->accountId();
             $returnUrl = OAuthReturnUrl::fromConfigPath(
                 $request,
-                (string) config('hub.oauth.return_path', ''),
+                $this->returnPath(),
             );
             $displayName = $this->displayNameResolver?->displayName();
 
@@ -75,6 +76,13 @@ class IntegrationController extends Controller
         } catch (HubException $e) {
             return $this->hubError($e);
         }
+    }
+
+    private function returnPath(): string
+    {
+        $path = Config::get('hub.oauth.return_path', '');
+
+        return is_string($path) ? $path : '';
     }
 
     private function accountId(): string

@@ -26,6 +26,9 @@ class CreateConnectSessionRequest extends Request implements HasBody
         return '/connect-sessions';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function defaultBody(): array
     {
         $body = ['account_external_id' => $this->accountExternalId];

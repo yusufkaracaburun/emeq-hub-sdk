@@ -29,6 +29,9 @@ class InitOAuthRequest extends Request implements HasBody
         return '/oauth/'.rawurlencode($this->provider).'/init';
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function defaultBody(): array
     {
         $body = ['account_external_id' => $this->accountExternalId];

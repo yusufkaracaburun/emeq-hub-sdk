@@ -46,15 +46,15 @@ final class HubWebhookHeaders
     public static function value(array $headers, string $name): ?string
     {
         foreach ($headers as $key => $value) {
-            if (strcasecmp((string) $key, $name) !== 0) {
+            if (strcasecmp($key, $name) !== 0) {
                 continue;
             }
 
             if (is_array($value)) {
-                return isset($value[0]) ? (string) $value[0] : null;
+                $value = $value[0] ?? null;
             }
 
-            return (string) $value;
+            return is_scalar($value) ? (string) $value : null;
         }
 
         return null;

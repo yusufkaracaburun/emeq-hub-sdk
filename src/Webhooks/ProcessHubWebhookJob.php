@@ -12,6 +12,7 @@ use Exception;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
@@ -44,8 +45,10 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         parent::__construct($webhookCall);
 
         $payload = is_array($webhookCall->payload) ? $webhookCall->payload : [];
-        $this->accountId = (string) ($payload['account_id'] ?? '');
-        $this->webhookCallId = (int) $webhookCall->getKey();
+        $accountId = $payload['account_id'] ?? null;
+
+        $this->accountId = is_scalar($accountId) ? (string) $accountId : '';
+        $this->webhookCallId = self::keyOf($webhookCall);
     }
 
     public function handle(): void
@@ -103,7 +106,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             }
 
             try {
-                if ($this->alreadyProcessed($eventId, (int) $call->getKey())) {
+                if ($this->alreadyProcessed($eventId, self::keyOf($call))) {
                     Log::info('hub.webhook.deduplicated', [
                         'event_id' => $eventId,
                         'account_id' => $accountId,
@@ -154,16 +157,28 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
      */
     protected function deduplicationLock(string $eventId): Lock
     {
-        $configured = config('hub.webhook.lock_store');
+        // Config::string() would throw on the null this key legitimately holds.
+        $configured = Config::get('hub.webhook.lock_store');
         $name = is_string($configured) && $configured !== '' ? $configured : null;
 
         $store = Cache::store($name)->getStore();
 
         if (! $store instanceof LockProvider) {
-            throw MissingConfigurationException::webhookLockStoreNotLockable($name ?? (string) config('cache.default'));
+            $default = Config::get('cache.default');
+
+            throw MissingConfigurationException::webhookLockStoreNotLockable(
+                $name ?? (is_string($default) ? $default : 'default'),
+            );
         }
 
         return $store->lock($this->deduplicationLockKey($eventId), 30);
+    }
+
+    private static function keyOf(WebhookCall $call): int
+    {
+        $key = $call->getKey();
+
+        return is_numeric($key) ? (int) $key : 0;
     }
 
     /**

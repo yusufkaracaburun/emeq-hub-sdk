@@ -32,11 +32,17 @@ class GetAccountingRequest extends Request
         return $this->path;
     }
 
+    /**
+     * @return array<string, string>
+     */
     protected function defaultHeaders(): array
     {
         return $this->accountIdHeaders($this->accountId);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function defaultQuery(): array
     {
         return $this->queryParameters;

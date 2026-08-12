@@ -30,11 +30,17 @@ class SyncAccountingRequest extends Request implements HasBody
         return '/accounting/sync';
     }
 
+    /**
+     * @return array<string, string>
+     */
     protected function defaultHeaders(): array
     {
         return $this->accountIdHeaders($this->accountId);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function defaultBody(): array
     {
         return $this->body;

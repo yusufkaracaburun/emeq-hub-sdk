@@ -17,12 +17,16 @@ final class HubRouteMiddleware
     public static function normalize(mixed $middleware): array
     {
         if (! is_array($middleware)) {
-            $middleware = array_map('trim', explode(',', (string) $middleware));
+            $middleware = is_scalar($middleware)
+                ? explode(',', (string) $middleware)
+                : [];
         }
 
-        /** @var list<string> */
         return array_values(array_filter(
-            array_map(static fn (mixed $m): string => trim((string) $m), $middleware),
+            array_map(
+                static fn (mixed $m): string => is_scalar($m) ? trim((string) $m) : '',
+                $middleware,
+            ),
             static fn (string $m): bool => $m !== '',
         ));
     }

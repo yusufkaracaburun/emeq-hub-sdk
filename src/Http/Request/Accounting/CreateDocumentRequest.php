@@ -31,6 +31,9 @@ class CreateDocumentRequest extends Request implements HasBody
         return '/accounting/documents';
     }
 
+    /**
+     * @return array<string, string>
+     */
     protected function defaultHeaders(): array
     {
         return [
@@ -39,6 +42,9 @@ class CreateDocumentRequest extends Request implements HasBody
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function defaultBody(): array
     {
         return $this->document;

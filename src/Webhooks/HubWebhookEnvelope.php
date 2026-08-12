@@ -36,6 +36,7 @@ final class HubWebhookEnvelope
             return null;
         }
 
+        /** @var array<string, mixed> $payload */
         return self::tryFromArray($payload);
     }
 
@@ -54,11 +55,19 @@ final class HubWebhookEnvelope
 
         return new self(
             event: HubWebhookEvent::fromWire($payload['event'] ?? null),
-            provider: (string) ($payload['provider'] ?? ''),
-            accountId: (string) $accountId,
-            occurredAt: isset($payload['occurred_at']) ? (string) $payload['occurred_at'] : null,
+            provider: self::text($payload['provider'] ?? null) ?? '',
+            accountId: self::text($accountId) ?? '',
+            occurredAt: self::text($payload['occurred_at'] ?? null),
             data: is_array($data) ? $data : [],
         );
+    }
+
+    /**
+     * Webhook bodies are untrusted: a non-scalar reads as absent.
+     */
+    private static function text(mixed $value): ?string
+    {
+        return is_scalar($value) ? (string) $value : null;
     }
 
     /**

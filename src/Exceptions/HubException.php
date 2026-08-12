@@ -21,14 +21,23 @@ class HubException extends Exception
     }
 
     /**
+     * Hub's body is untrusted JSON: anything non-scalar is treated as absent
+     * rather than cast, which would yield "Array" or an emitted warning.
+     */
+    private static function text(mixed $value): ?string
+    {
+        return is_scalar($value) ? (string) $value : null;
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      */
     public static function fromEnvelope(array $body, int $status, ?Throwable $previous = null): self
     {
-        $error = (string) ($body['error'] ?? $body['code'] ?? 'hub_error');
-        $category = (string) ($body['category'] ?? 'UNKNOWN_ERROR');
-        $message = (string) ($body['message'] ?? $error);
-        $requestId = isset($body['request_id']) ? (string) $body['request_id'] : null;
+        $error = self::text($body['error'] ?? $body['code'] ?? null) ?? 'hub_error';
+        $category = self::text($body['category'] ?? null) ?? 'UNKNOWN_ERROR';
+        $message = self::text($body['message'] ?? null) ?? $error;
+        $requestId = self::text($body['request_id'] ?? null);
 
         return match (true) {
             $status === 401, $category === 'AUTHENTICATION_ERROR' => new AuthenticationException($message, $error, $category, $requestId, $status, $previous),

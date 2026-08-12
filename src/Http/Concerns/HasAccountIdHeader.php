@@ -6,6 +6,9 @@ namespace Emeq\HubSdk\Http\Concerns;
 
 trait HasAccountIdHeader
 {
+    /**
+     * @return array<string, string>
+     */
     protected function accountIdHeaders(?string $accountId): array
     {
         if ($accountId === null || $accountId === '') {

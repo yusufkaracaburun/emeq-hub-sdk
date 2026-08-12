@@ -11,7 +11,9 @@ class ConnectSessions extends Resource
     /**
      * Mint Hub's hosted connect handoff URL (`/connect/{account}`).
      *
-     * @return array{url: mixed, expires_at: mixed, ...}
+     * Hub's response is not validated here — read keys defensively.
+     *
+     * @return array<string, mixed>
      */
     public function create(
         ?string $accountExternalId = null,
