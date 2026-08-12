@@ -1,0 +1,45 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+|--------------------------------------------------------------------------
+| Development-only Artisan entrypoint
+|--------------------------------------------------------------------------
+|
+| This package ships no application, but Laravel Boost (and any other
+| tooling that expects `php artisan`) resolves every path it touches
+| through base_path(). Booting through vendor/bin/testbench would root
+| that at vendor/orchestra/testbench-core/laravel, so guidelines, skills
+| and MCP config would be written inside vendor/.
+|
+| This shim boots a bare application rooted at the package itself, which
+| lets Boost read the real composer.json/composer.lock and write to the
+| repository root. It is excluded from the distributed archive via
+| .gitattributes and is never loaded by consumers of this package.
+|
+*/
+
+use Illuminate\Foundation\Application;
+use Symfony\Component\Console\Input\ArgvInput;
+
+define('LARAVEL_START', microtime(true));
+
+require __DIR__.'/vendor/autoload.php';
+
+// The framework expects these to exist; they are git-ignored scratch space.
+foreach (['bootstrap/cache', 'storage/framework/views', 'storage/logs'] as $path) {
+    is_dir(__DIR__.'/'.$path) || mkdir(__DIR__.'/'.$path, 0755, true);
+}
+
+// Boost (and most dev tooling) refuses to register outside a local environment.
+$_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = 'local';
+$_SERVER['APP_DEBUG'] = $_ENV['APP_DEBUG'] = 'true';
+
+$app = Application::configure(basePath: __DIR__)
+    ->withMiddleware(function (): void {})
+    ->withExceptions(function (): void {})
+    ->create();
+
+exit($app->handleCommand(new ArgvInput));

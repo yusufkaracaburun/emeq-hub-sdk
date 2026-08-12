@@ -1,4 +1,6 @@
 /vendor
+/bootstrap
+/storage
 /.phpunit.cache
 /.phpunit.result.cache
 /build
@@ -7,3 +9,6 @@
 .idea
 .vscode
 .DS_Store
+.claude/settings.local.json
+# Junie requires absolute paths in its MCP config — machine-specific.
+.junie/mcp/mcp.json

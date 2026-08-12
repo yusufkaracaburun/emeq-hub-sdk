@@ -12,3 +12,15 @@
 /tests              export-ignore
 /docs               export-ignore
 /.editorconfig      export-ignore
+
+# Laravel Boost + AI agent tooling — development only, never shipped.
+/artisan            export-ignore
+/boost.json         export-ignore
+/config/boost.php   export-ignore
+/CLAUDE.md          export-ignore
+/AGENTS.md          export-ignore
+/.mcp.json          export-ignore
+/.ai                export-ignore
+/.claude            export-ignore
+/.cursor            export-ignore
+/.junie             export-ignore

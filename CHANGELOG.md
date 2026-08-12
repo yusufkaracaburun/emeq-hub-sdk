@@ -53,16 +53,20 @@ audit itself missed.
 - Error-envelope decoding lives in one place (`Http\HubErrorResponse`); the
   response middleware and the connector's exception hook both delegate to it.
 
-## [Unreleased]
+### Development tooling
 
-### Added
+Nothing here ships: every path below is `export-ignore`d.
 
-- Laravel Boost as a dev dependency, wired for a package repository: an
+- Laravel Boost as a dev dependency, wired for a package repository. An
   `artisan` shim boots a bare app rooted at the package so Boost resolves
   `base_path()` here instead of inside `vendor/`. Guidelines, skills and MCP
-  config are generated for the detected agents; app-only MCP tools are
-  disabled in `config/boost.php`. All of it is `export-ignore`d — the
-  distributed package is unchanged.
+  config are generated for the detected agents; app-only MCP tools are disabled
+  in `config/boost.php`.
+- Agent artefacts are deduplicated with symlinks: `.ai/skills/<name>` is the one
+  copy of each skill, `CLAUDE.md` the one copy of the guidelines, `.mcp.json` the
+  one MCP config.
+- `docs/reviews/2026-08-12-whole-repo-architecture-audit.md` — the audit this
+  release answers.
 
 ## [0.6.0] — 2026-08-12
 
