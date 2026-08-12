@@ -68,14 +68,19 @@ return [
     | under your auth middleware. Set middleware to match your app
     | (e.g. api,auth:api or api,auth:sanctum).
     |
+    | The default throttles: these endpoints fan out to the Hub API, and
+    | Laravel's `api` group carries no rate limiter unless your app opts in.
+    | EMEQ_HUB_ROUTES_MIDDLEWARE is comma-separated and therefore cannot express
+    | `throttle:60,1` — use a named limiter (`throttle:hub`) when overriding.
+    |
     */
     'routes' => [
         'enabled' => (bool) env('EMEQ_HUB_ROUTES', false),
         'prefix' => env('EMEQ_HUB_ROUTES_PREFIX', 'api'),
         'middleware' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('EMEQ_HUB_ROUTES_MIDDLEWARE', 'api,auth:sanctum')),
-        ))),
+            explode(',', (string) env('EMEQ_HUB_ROUTES_MIDDLEWARE', '')),
+        ))) ?: ['api', 'auth:sanctum', 'throttle:60,1'],
     ],
 
     /*

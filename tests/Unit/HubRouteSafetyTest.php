@@ -12,6 +12,14 @@ it('normalizes comma-separated middleware and drops empties', function (): void 
         ->toBe(['api', 'auth:sanctum', 'web']);
 });
 
+it('ships a throttled default middleware stack', function (): void {
+    // The BFF fans out to the Hub API and Laravel's `api` group carries no
+    // rate limiter of its own, so the shipped default must bring one.
+    $default = require __DIR__.'/../../config/hub.php';
+
+    expect($default['routes']['middleware'])->toBe(['api', 'auth:sanctum', 'throttle:60,1']);
+});
+
 it('refuses empty middleware', function (): void {
     HubRouteMiddleware::assertNotEmpty([]);
 })->throws(InvalidArgumentException::class, 'must not be empty');
