@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] — 2026-08-12
+
+### Fixed
+
+- `create_webhook_calls_table` migration stub now includes `down()` (`dropIfExists`) so consumers can roll back.
+
 ## [0.5.0] — 2026-08-12
 
 ### Added
