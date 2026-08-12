@@ -50,11 +50,6 @@ return [
     | support atomic locks: Laravel's `database` default needs the framework's
     | cache_locks table, so point this at redis/memcached to skip that.
     |
-    | `opaque_event_ids` are X-Emeq-Event-Id values Hub reuses across unrelated
-    | events, so they identify nothing. They are processed like a webhook with
-    | no event id at all: never deduplicated. Hub sends `no-id` when the partner
-    | omits an id of its own.
-    |
     */
     'webhook' => [
         'secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
@@ -62,7 +57,6 @@ return [
         'profile' => HubWebhookProfile::class,
         'job' => ProcessHubWebhookJob::class,
         'lock_store' => env('EMEQ_HUB_WEBHOOK_LOCK_STORE'),
-        'opaque_event_ids' => ['no-id'],
     ],
 
     /*

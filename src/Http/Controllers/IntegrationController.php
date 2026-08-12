@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Http\Controllers;
 
-use Emeq\HubSdk\Contracts\ResolvesAccountDisplayName;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
@@ -28,13 +27,12 @@ use Illuminate\Support\Facades\Log;
 class IntegrationController extends Controller
 {
     /**
-     * The two resolvers are consumer bindings and may be absent; the container
+     * The resolver is a consumer binding and may be absent; the container
      * injects null for an unbound interface that has a default.
      */
     public function __construct(
         private readonly Hub $hub,
         private readonly ?ResolvesAccountId $accountIdResolver = null,
-        private readonly ?ResolvesAccountDisplayName $displayNameResolver = null,
     ) {}
 
     public function index(): JsonResponse
@@ -61,11 +59,9 @@ class IntegrationController extends Controller
                 $request,
                 $this->returnPath(),
             );
-            $displayName = $this->displayNameResolver?->displayName();
-
             $session = $this->hub->connectSessions()->create(
                 accountExternalId: $externalId,
-                displayName: $displayName,
+                displayName: $this->accountIdResolver->displayName(),
                 returnUrl: $returnUrl,
             );
 
@@ -85,6 +81,9 @@ class IntegrationController extends Controller
         return is_string($path) ? $path : '';
     }
 
+    /**
+     * @phpstan-assert !null $this->accountIdResolver
+     */
     private function accountId(): string
     {
         $this->assertAccountResolverBound();

@@ -11,4 +11,10 @@ namespace Emeq\HubSdk\Contracts;
 interface ResolvesAccountId
 {
     public function accountId(): string;
+
+    /**
+     * Human-readable Hub account name, used on first connect. Return null to
+     * let Hub name the account itself.
+     */
+    public function displayName(): ?string;
 }

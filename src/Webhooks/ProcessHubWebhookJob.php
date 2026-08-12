@@ -30,6 +30,14 @@ use Throwable;
 class ProcessHubWebhookJob extends ProcessWebhookJob
 {
     /**
+     * X-Emeq-Event-Id values Hub reuses across unrelated events, so they
+     * identify nothing. See {@see deduplicableEventId()}.
+     *
+     * @var list<string>
+     */
+    protected const OPAQUE_EVENT_IDS = ['no-id'];
+
+    /**
      * Explicit retry policy: without one the package inherits whatever the
      * host's queue worker was started with, which is not a contract.
      */
@@ -192,9 +200,9 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
      * Hub mints an id per delivery, but only when the partner supplies one:
      * Snelstart's controller falls back to the literal string `no-id`, so many
      * unrelated events arrive sharing it. Treating that as an identity makes the
-     * first one swallow all the rest. Configure further sentinels through
-     * `hub.webhook.opaque_event_ids` — they are handled exactly like a missing
-     * header: processed, never deduplicated.
+     * first one swallow all the rest. Such values are handled exactly like a
+     * missing header: processed, never deduplicated. Subclasses recognise
+     * further sentinels by overriding {@see OPAQUE_EVENT_IDS}.
      */
     protected function deduplicableEventId(?string $eventId): ?string
     {
@@ -202,9 +210,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             return null;
         }
 
-        $opaque = Config::array('hub.webhook.opaque_event_ids', ['no-id']);
-
-        return in_array($eventId, $opaque, true) ? null : $eventId;
+        return in_array($eventId, static::OPAQUE_EVENT_IDS, true) ? null : $eventId;
     }
 
     /**

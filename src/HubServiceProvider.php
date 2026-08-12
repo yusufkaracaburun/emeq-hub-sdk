@@ -31,7 +31,7 @@ class HubServiceProvider extends PackageServiceProvider
                     ->endWith(function (InstallCommand $command): void {
                         $command->info('Next steps:');
                         $command->line('1. Set EMEQ_HUB_* in .env (BASE, PAT, WEBHOOK_SECRET, …)');
-                        $command->line('2. Bind ResolvesAccountId (+ optional ResolvesAccountDisplayName)');
+                        $command->line('2. Bind ResolvesAccountId (accountId + displayName)');
                         $command->line('3. Bind ResolvesWebhookAccount for inbound Hub webhooks');
                         $command->line('4. Route::webhooks(\'webhooks/emeq-hub\', \'emeq-hub\') + CSRF except');
                         $command->line('5. Migrate webhook_calls on the webhook DB (tenant DB if multi-DB)');

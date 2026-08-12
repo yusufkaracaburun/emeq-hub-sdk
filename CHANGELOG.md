@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.0] — 2026-08-12
+
+Surface reduction ahead of 1.0. The package carried extension points that no
+consumer uses and one dependency it never called; every one of them is a semver
+contract, so they go before the contract freezes.
+
+### Removed
+
+- **`saloonphp/laravel-plugin` is no longer required.** The SDK never referenced
+  it: no `Saloon\Laravel` import, no `Saloon::` call, in `src/` or `tests/`.
+  `HubConnector` extends Saloon's framework-agnostic core and the tests mock with
+  `Saloon\Http\Faking\MockClient`, also core. It was, on its own, the reason the
+  package floor was Laravel 11+ (`illuminate/support: ^11.0 || ^12.39.0 ||
+  ^13.0`). Consumers that want Saloon's Telescope/Pulse panels can require it
+  themselves.
+
+- **`hub.webhook.opaque_event_ids` config key** (added in 0.7.1). Hub is
+  first-party, so its sentinel event ids are known at release time, not
+  deployment time. The default moves to
+  `ProcessHubWebhookJob::OPAQUE_EVENT_IDS`; subclasses override the constant.
+  Behaviour is unchanged — `no-id` is still processed and never deduplicated.
+
+### Changed
+
+- **`ResolvesAccountDisplayName` is folded into `ResolvesAccountId`.** The
+  interface held one nullable method, and every consumer implemented both on one
+  class and bound it twice. `ResolvesAccountId` now declares
+  `displayName(): ?string`; return null to let Hub name the account.
+  `IntegrationController` takes one resolver instead of two.
+
+  **Upgrading:** move `displayName()` onto your `ResolvesAccountId`
+  implementation, drop `implements ResolvesAccountDisplayName`, and remove the
+  second container binding.
+
 ## [0.7.1] — 2026-08-12
 
 ### Fixed

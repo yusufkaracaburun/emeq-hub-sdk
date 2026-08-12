@@ -277,9 +277,7 @@ test('an opaque event id takes no lock, so concurrent deliveries both process', 
     $held->release();
 });
 
-test('the opaque list is configurable', function () {
-    config()->set('hub.webhook.opaque_event_ids', ['no-id', 'placeholder']);
-
+test('a subclass can widen the opaque list', function () {
     Event::fake([HubWebhookReceived::class]);
 
     makeWebhookCall([
@@ -290,7 +288,14 @@ test('the opaque list is configurable', function () {
         'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['placeholder']],
     ]);
 
+    // The base job deduplicates `placeholder`: it is a real id as far as it knows.
     (new ProcessHubWebhookJob($second))->handle();
+    Event::assertNotDispatched(HubWebhookReceived::class);
+
+    (new class($second) extends ProcessHubWebhookJob
+    {
+        protected const OPAQUE_EVENT_IDS = ['no-id', 'placeholder'];
+    })->handle();
 
     Event::assertDispatched(HubWebhookReceived::class);
 });

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Emeq\HubSdk\Contracts\ResolvesAccountDisplayName;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest;
@@ -19,10 +18,7 @@ describe('with account resolver', function (): void {
             {
                 return 'tenant-77';
             }
-        });
 
-        $this->app->bind(ResolvesAccountDisplayName::class, fn (): ResolvesAccountDisplayName => new class implements ResolvesAccountDisplayName
-        {
             public function displayName(): ?string
             {
                 return 'Demo BV';
