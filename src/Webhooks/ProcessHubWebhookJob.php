@@ -20,9 +20,22 @@ use Spatie\WebhookClient\Models\WebhookCall;
  */
 class ProcessHubWebhookJob extends ProcessWebhookJob
 {
+    public string $accountId = '';
+
+    public int $webhookCallId = 0;
+
+    public function __construct(WebhookCall $webhookCall)
+    {
+        parent::__construct($webhookCall);
+
+        $payload = is_array($webhookCall->payload) ? $webhookCall->payload : [];
+        $this->accountId = (string) ($payload['account_id'] ?? '');
+        $this->webhookCallId = (int) $webhookCall->getKey();
+    }
+
     public function handle(): void
     {
-        $accountId = $this->accountIdForHandle();
+        $accountId = $this->accountId;
 
         try {
             if ($accountId === '' || ! $this->bindAccountContext($accountId)) {
@@ -83,20 +96,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
     }
 
     /**
-     * Prefer ids from {@see SerializesHubWebhookByIds}; fall back to payload.
-     */
-    protected function accountIdForHandle(): string
-    {
-        if (property_exists($this, 'accountId') && is_string($this->accountId) && $this->accountId !== '') {
-            return $this->accountId;
-        }
-
-        $payload = is_array($this->webhookCall->payload) ? $this->webhookCall->payload : [];
-
-        return (string) ($payload['account_id'] ?? '');
-    }
-
-    /**
      * Switch tenant / DB before reading webhook_calls. Return false to abort.
      */
     protected function bindAccountContext(string $accountId): bool
@@ -110,12 +109,19 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
     }
 
     /**
-     * Default: use the model Spatie already hydrated (single-DB).
-     * Multi-DB: reload after bindAccountContext().
+     * Single-DB: the model Spatie hydrated is already complete.
+     *
+     * After {@see SerializesHubWebhookByIds} restores a job from the queue the
+     * model carries only its id, so it is reloaded here — which runs *after*
+     * bindAccountContext(), i.e. on the right connection for multi-DB consumers.
      */
     protected function resolveWebhookCall(): ?WebhookCall
     {
-        return $this->webhookCall;
+        if ($this->webhookCall->payload !== null) {
+            return $this->webhookCall;
+        }
+
+        return WebhookCall::query()->find($this->webhookCallId);
     }
 
     protected function processEnvelope(

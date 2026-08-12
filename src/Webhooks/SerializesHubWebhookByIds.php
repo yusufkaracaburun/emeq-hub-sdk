@@ -10,23 +10,11 @@ use Spatie\WebhookClient\Models\WebhookCall;
  * Queue serialization for multi-DB consumers: persist only account + call ids,
  * never the WebhookCall Eloquent model (wrong connection after worker reboot).
  *
- * Use on a subclass of {@see ProcessHubWebhookJob}.
+ * Use on a subclass of {@see ProcessHubWebhookJob}, which owns `$accountId` /
+ * `$webhookCallId` and reloads the stripped model in resolveWebhookCall().
  */
 trait SerializesHubWebhookByIds
 {
-    public string $accountId = '';
-
-    public int $webhookCallId = 0;
-
-    public function __construct(WebhookCall $webhookCall)
-    {
-        parent::__construct($webhookCall);
-
-        $payload = is_array($webhookCall->payload) ? $webhookCall->payload : [];
-        $this->accountId = (string) ($payload['account_id'] ?? '');
-        $this->webhookCallId = (int) $webhookCall->getKey();
-    }
-
     /**
      * @return array<string, mixed>
      */

@@ -213,6 +213,34 @@ test('serializes hub webhook by ids round-trips', function () {
         ->and($restored->webhookCall->id)->toBe((int) $call->getKey());
 });
 
+test('a restored by-ids job reloads the stripped webhook call and still processes', function () {
+    // Regression: __unserialize rebuilds a WebhookCall carrying only its id.
+    // The old default resolveWebhookCall() handed that hollow model straight
+    // back, so payload was null and the job logged invalid_payload_in_job and
+    // returned — a dropped webhook that looked like a clean run.
+    Event::fake([HubWebhookReceived::class, HubConnectionRevoked::class]);
+
+    $call = makeWebhookCall();
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        use SerializesHubWebhookByIds;
+    };
+
+    $restored = new class(new WebhookCall) extends ProcessHubWebhookJob
+    {
+        use SerializesHubWebhookByIds;
+    };
+    $restored->__unserialize($job->__serialize());
+
+    expect($restored->webhookCall->payload)->toBeNull();
+
+    $restored->handle();
+
+    Event::assertDispatched(HubWebhookReceived::class);
+    Event::assertDispatched(HubConnectionRevoked::class);
+});
+
 test('hub webhook event constants match hub canonical vocabulary', function () {
     $expected = [
         'accounting.bank_statement.changed',
