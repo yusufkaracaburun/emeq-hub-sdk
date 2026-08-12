@@ -28,6 +28,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Inbound Hub webhooks (Spatie webhook-client)
+    |--------------------------------------------------------------------------
+    |
+    | Shared HMAC secret with Hub Consumer `webhook_callback_secret`.
+    | Wire profile/job via SpatieWebhookClientConfig::make() in
+    | config/webhook-client.php — see README.
+    |
+    */
+    'webhook_secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP
     |--------------------------------------------------------------------------
     */

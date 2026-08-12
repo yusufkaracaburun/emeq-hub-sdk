@@ -1,0 +1,179 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Emeq\HubSdk\Webhooks;
+
+use Illuminate\Support\Facades\Log;
+use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
+use Spatie\WebhookClient\Models\WebhookCall;
+
+/**
+ * Shared Hub webhook processing: context bind → reload → dedupe → event dispatch.
+ *
+ * Single-DB apps can use this class as-is (or extend only hooks).
+ * Multi-DB apps override bind/release/resolveWebhookCall and usually
+ * {@see SerializesHubWebhookByIds}.
+ */
+class ProcessHubWebhookJob extends ProcessWebhookJob
+{
+    public function handle(): void
+    {
+        $accountId = $this->accountIdForHandle();
+
+        try {
+            if ($accountId === '' || ! $this->bindAccountContext($accountId)) {
+                Log::info('hub.webhook.skipped', [
+                    'reason' => 'unknown_account_in_job',
+                    'account_id' => $accountId,
+                    'webhook_call_id' => $this->webhookCall->getKey(),
+                ]);
+
+                return;
+            }
+
+            $call = $this->resolveWebhookCall();
+            if ($call === null) {
+                Log::info('hub.webhook.skipped', [
+                    'reason' => 'webhook_call_missing',
+                    'account_id' => $accountId,
+                    'webhook_call_id' => $this->webhookCall->getKey(),
+                ]);
+
+                return;
+            }
+
+            $this->webhookCall = $call;
+
+            $headers = is_array($call->headers) ? $call->headers : [];
+            $eventId = HubWebhookHeaders::eventId($headers);
+            $requestId = HubWebhookHeaders::requestId($headers);
+
+            if ($eventId !== null && $this->alreadyProcessed($eventId, (int) $call->getKey())) {
+                Log::info('hub.webhook.deduplicated', [
+                    'event_id' => $eventId,
+                    'account_id' => $accountId,
+                    'webhook_call_id' => $call->getKey(),
+                ]);
+
+                return;
+            }
+
+            $envelope = HubWebhookEnvelope::tryFromArray(
+                is_array($call->payload) ? $call->payload : []
+            );
+
+            if ($envelope === null) {
+                Log::info('hub.webhook.skipped', [
+                    'reason' => 'invalid_payload_in_job',
+                    'account_id' => $accountId,
+                    'webhook_call_id' => $call->getKey(),
+                ]);
+
+                return;
+            }
+
+            $this->processEnvelope($envelope, $eventId, $requestId);
+        } finally {
+            $this->releaseAccountContext();
+        }
+    }
+
+    /**
+     * Prefer ids from {@see SerializesHubWebhookByIds}; fall back to payload.
+     */
+    protected function accountIdForHandle(): string
+    {
+        if (property_exists($this, 'accountId') && is_string($this->accountId) && $this->accountId !== '') {
+            return $this->accountId;
+        }
+
+        $payload = is_array($this->webhookCall->payload) ? $this->webhookCall->payload : [];
+
+        return (string) ($payload['account_id'] ?? '');
+    }
+
+    /**
+     * Switch tenant / DB before reading webhook_calls. Return false to abort.
+     */
+    protected function bindAccountContext(string $accountId): bool
+    {
+        return true;
+    }
+
+    protected function releaseAccountContext(): void
+    {
+        //
+    }
+
+    /**
+     * Default: use the model Spatie already hydrated (single-DB).
+     * Multi-DB: reload after bindAccountContext().
+     */
+    protected function resolveWebhookCall(): ?WebhookCall
+    {
+        return $this->webhookCall;
+    }
+
+    protected function processEnvelope(
+        HubWebhookEnvelope $envelope,
+        ?string $eventId,
+        ?string $requestId,
+    ): void {
+        if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) {
+            $this->onConnectionRevoked($envelope, $eventId, $requestId);
+
+            return;
+        }
+
+        $this->onIgnored($envelope, $eventId, $requestId);
+    }
+
+    protected function onConnectionRevoked(
+        HubWebhookEnvelope $envelope,
+        ?string $eventId,
+        ?string $requestId,
+    ): void {
+        Log::info('hub.webhook.connection_revoked', [
+            'event' => $envelope->event,
+            'provider' => $envelope->provider,
+            'account_id' => $envelope->accountId,
+            'request_id' => $requestId,
+            'event_id' => $eventId,
+            'data' => $envelope->data,
+        ]);
+    }
+
+    protected function onIgnored(
+        HubWebhookEnvelope $envelope,
+        ?string $eventId,
+        ?string $requestId,
+    ): void {
+        Log::info('hub.webhook.ignored', [
+            'event' => $envelope->event,
+            'provider' => $envelope->provider,
+            'account_id' => $envelope->accountId,
+            'request_id' => $requestId,
+            'event_id' => $eventId,
+        ]);
+    }
+
+    protected function alreadyProcessed(string $eventId, int $currentId): bool
+    {
+        return WebhookCall::query()
+            ->where('name', $this->webhookConfigName())
+            ->where('id', '<', $currentId)
+            ->whereNull('exception')
+            ->get()
+            ->contains(function (WebhookCall $prior) use ($eventId): bool {
+                $headers = is_array($prior->headers) ? $prior->headers : [];
+
+                return HubWebhookHeaders::eventId($headers) === $eventId;
+            });
+    }
+
+    protected function webhookConfigName(): string
+    {
+        return 'emeq-hub';
+    }
+}

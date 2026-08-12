@@ -1,6 +1,6 @@
 {
-    "name": "emeq/hub-sdk",
-    "description": "Laravel 13 consumer SDK for the emeq Hub /v1 API — provider-agnostic (new Hub partners appear without SDK changes).",
+  "name": "emeq/hub-sdk",
+  "description": "Laravel 13 consumer SDK for the emeq Hub /v1 API — provider-agnostic (new Hub partners appear without SDK changes).",
     "keywords": [
         "emeq",
         "laravel",
@@ -24,7 +24,8 @@
         "illuminate/support": "^13.0",
         "saloonphp/laravel-plugin": "^4.0",
         "saloonphp/saloon": "^4.0",
-        "spatie/laravel-package-tools": "^1.16"
+        "spatie/laravel-package-tools": "^1.16",
+        "spatie/laravel-webhook-client": "^3.4"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",

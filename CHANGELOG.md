@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0] — 2026-08-12
+
+### Added
+
+- Inbound Hub webhook helpers for Laravel consumers:
+  - `HubWebhookEnvelope`, `HubWebhookHeaders`, `HubWebhookEvent`
+  - `ResolvesWebhookAccount` contract
+  - `HubWebhookProfile` + `ProcessHubWebhookJob` (Spatie webhook-client)
+  - `SerializesHubWebhookByIds` for multi-DB queue workers
+  - `SpatieWebhookClientConfig::make()` config builder
+- Config: `hub.webhook_secret` (`EMEQ_HUB_WEBHOOK_SECRET`)
+- Dependency: `spatie/laravel-webhook-client` ^3.4
+
 ## [0.3.0] — 2026-08-11
 
 ### Changed

@@ -7,21 +7,22 @@ Laravel 13 consumer client for the emeq Hub `/v1` API (Saloon v4).
 SDK release. Partner wire stays in the Hub + `emeq/*-api` packages — this SDK
 does **not** expose per-partner pass-through.
 
-Payload shapes, OAuth UX, webhooks, and OpenAPI live in the Hub docs — see
-[Further reading](#further-reading). This README covers package install and call
-sites.
+Payload shapes, OAuth UX, and OpenAPI live in the Hub docs — see
+[Further reading](#further-reading). This README covers package install, call
+sites, and inbound webhook wiring.
 
 ## Install
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.3
+composer require emeq/hub-sdk:^0.4
 ```
 
 ```env
 EMEQ_HUB_BASE=https://hub.emeq.nl
 EMEQ_HUB_PAT=your-sanctum-pat
 EMEQ_HUB_TIMEOUT=30
+EMEQ_HUB_WEBHOOK_SECRET=shared-with-hub-consumer-callback-secret
 # Opt-in BFF routes (default off) — enable + tune middleware to your guard
 EMEQ_HUB_ROUTES=true
 EMEQ_HUB_ROUTES_PREFIX=api
@@ -77,6 +78,18 @@ class HubAccountIdResolver implements ResolvesAccountId, ResolvesAccountDisplayN
 $this->app->bind(ResolvesAccountId::class, HubAccountIdResolver::class);
 $this->app->bind(ResolvesAccountDisplayName::class, HubAccountIdResolver::class);
 ```
+
+## Inbound Hub webhooks
+
+Spatie `webhook-client` bases live in the SDK; apps only wire tenancy + handlers.
+
+1. `config/webhook-client.php` via `SpatieWebhookClientConfig::make(profile:, job:)`.
+2. Bind `ResolvesWebhookAccount` (`account_id` → tenant; may switch DB).
+3. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except.
+4. Spatie `webhook_calls` migration (per tenant DB if multi-DB).
+5. Multi-DB jobs: extend `ProcessHubWebhookJob` + `use SerializesHubWebhookByIds`.
+
+Events: `HubWebhookEvent`. Override `onConnectionRevoked()` / `onIgnored()` for domain logic.
 
 ## Usage
 
