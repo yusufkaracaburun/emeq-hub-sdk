@@ -17,10 +17,6 @@ server side and says nothing about what this SDK supports — hence this documen
 - [Accounts and connections](#accounts-and-connections)
 - [Accounting](#accounting)
 - [Exact pass-through](#exact-pass-through)
-- [Snelstart pass-through](#snelstart-pass-through)
-- [Mollie — payments](#mollie--payments)
-- [Mollie — Connect](#mollie--connect)
-- [Account subscriptions](#account-subscriptions)
 - [Billing](#billing)
 - [Reaching what is not wrapped](#reaching-what-is-not-wrapped)
 - [Suggested order](#suggested-order)
@@ -45,21 +41,22 @@ grep -rn -A 3 'function resolveEndpoint' src/Http/Request
 
 ## Status
 
+Scoped to Exact, the only provider connected so far. The Hub also exposes a
+Mollie surface (29 endpoints across payments, Connect and account
+subscriptions) and a Snelstart pass-through; both sit behind their own feature
+flags and are left out here until they are actually in use.
+
 | Area | Endpoints | Wrapped |
 |---|---:|---:|
 | Platform | 1 | 0 |
-| Accounts and connections | 11 | 5 |
+| Accounts and connections | 8 | 7 |
 | Accounting | 13 | 13 |
 | Exact pass-through | 5 | 0 |
-| Snelstart pass-through | 1 | 0 |
-| Mollie — payments | 20 | 0 |
-| Mollie — Connect | 9 | 0 |
-| Account subscriptions | 6 | 0 |
 | Billing | 1 | 0 |
-| **Total (consumer surface)** | **65** | **19** |
+| **Total (in scope)** | **28** | **20** |
 
-Outside those 65 sit two OAuth callbacks (browser redirects) and two
-`/v1/admin/billing/*` routes (Emeq-internal, behind `emeq.admin`).
+Counts exclude the OAuth callbacks (browser redirects, listed below for
+completeness) and `/v1/admin/billing/*` (Emeq-internal, behind `emeq.admin`).
 
 ## Platform
 
@@ -79,16 +76,14 @@ providers → connect session or OAuth init → read connection state.
 | POST | `/v1/connect-sessions` | `integrations:manage` \| `consumer:manage-accounts` | `connectSessions()->create()` | ✅ |
 | POST | `/v1/oauth/{provider}/init` | `integrations:manage` | `oauth()->init()` | ✅ |
 | POST | `/v1/oauth/exact/init` | `integrations:manage` \| `exact:write` | via `oauth()->init('exact')` | ✅ |
-| POST | `/v1/oauth/mollie/init` | `integrations:manage` \| `mollie:write` | via `oauth()->init('mollie')` | ✅ |
 | POST | `/v1/connections` | — | | ⬜ |
 | GET | `/v1/connections/{connection}` | — | `connections()->get()` | ✅ |
 | DELETE | `/v1/connections/{connection}` | — | `connections()->delete()` | ✅ |
 | GET | `/v1/oauth/exact/callback` | public | | — |
-| GET | `/v1/oauth/mollie/callback` | public | | — |
 
 `POST /v1/connections` is the only lifecycle route without a wrapper. OAuth
 providers do not need it — `init` creates the row itself — so it only matters for
-providers without an OAuth flow (Snelstart, clientkey).
+providers that authenticate with a client key instead.
 
 ## Accounting
 
@@ -133,67 +128,6 @@ The first four overlap functionally with `ledger-accounts`, `tax-codes` and
 provider-independent should use those; this route exists for Exact-specific
 fields.
 
-## Snelstart pass-through
-
-| | Endpoint | Ability | SDK | |
-|---|---|---|---|---|
-| ANY | `/v1/snelstart/{path}` | — | | ⬜ |
-
-## Mollie — payments
-
-Behind the `mollie` feature flag.
-
-| | Endpoint | SDK | |
-|---|---|---|---|
-| POST | `/v1/mollie/payments` | | ⬜ |
-| GET | `/v1/mollie/payments/{id}` | | ⬜ |
-| DELETE | `/v1/mollie/payments/{id}` | | ⬜ |
-| POST | `/v1/mollie/payments/{id}/refunds` | | ⬜ |
-| GET | `/v1/mollie/payments/{id}/refunds` | | ⬜ |
-| GET | `/v1/mollie/refunds/{id}` | | ⬜ |
-| GET | `/v1/mollie/payment-methods` | | ⬜ |
-| GET | `/v1/mollie/payment-links` | | ⬜ |
-| POST | `/v1/mollie/payment-links` | | ⬜ |
-| GET | `/v1/mollie/payment-links/{id}` | | ⬜ |
-| GET | `/v1/mollie/customers` | | ⬜ |
-| POST | `/v1/mollie/customers` | | ⬜ |
-| GET | `/v1/mollie/customers/{id}` | | ⬜ |
-| GET | `/v1/mollie/customers/{id}/mandates` | | ⬜ |
-| GET | `/v1/mollie/customers/{id}/mandates/{mandate_id}` | | ⬜ |
-| DELETE | `/v1/mollie/customers/{id}/mandates/{mandate_id}` | | ⬜ |
-| GET | `/v1/mollie/customers/{id}/subscriptions` | | ⬜ |
-| POST | `/v1/mollie/customers/{id}/subscriptions` | | ⬜ |
-| GET | `/v1/mollie/customers/{id}/subscriptions/{sub_id}` | | ⬜ |
-| DELETE | `/v1/mollie/customers/{id}/subscriptions/{sub_id}` | | ⬜ |
-
-## Mollie — Connect
-
-Partner onboarding: organisations, profiles and permissions of a connected
-Mollie organisation.
-
-| | Endpoint | SDK | |
-|---|---|---|---|
-| GET | `/v1/mollie/connect/onboarding/me` | | ⬜ |
-| GET | `/v1/mollie/connect/organizations/me` | | ⬜ |
-| GET | `/v1/mollie/connect/organizations/{id}` | | ⬜ |
-| GET | `/v1/mollie/connect/profiles` | | ⬜ |
-| POST | `/v1/mollie/connect/profiles` | | ⬜ |
-| GET | `/v1/mollie/connect/profiles/{id}` | | ⬜ |
-| GET | `/v1/mollie/connect/permissions` | | ⬜ |
-| GET | `/v1/mollie/connect/permissions/{id}` | | ⬜ |
-| POST | `/v1/mollie/connect/client-links` | | ⬜ |
-
-## Account subscriptions
-
-| | Endpoint | Ability | SDK | |
-|---|---|---|---|---|
-| POST | `/v1/account-subscriptions` | `mollie:write` | | ⬜ |
-| GET | `/v1/account-subscriptions` | `mollie:read` \| `mollie:write` | | ⬜ |
-| GET | `/v1/account-subscriptions/{id}` | `mollie:read` \| `mollie:write` | | ⬜ |
-| DELETE | `/v1/account-subscriptions/{id}` | `mollie:write` | | ⬜ |
-| POST | `/v1/account-subscriptions/{id}/pause` | `mollie:write` | | ⬜ |
-| POST | `/v1/account-subscriptions/{id}/resume` | `mollie:write` | | ⬜ |
-
 ## Billing
 
 | | Endpoint | Ability | SDK | |
@@ -229,7 +163,7 @@ $response = Hub::connector()->send(new class('acme-42') extends Request {
 Mind that header. `X-Account-Id` does not live on the connector; resources set it
 per request through `HasAccountIdHeader`. Leave it out and the Hub cannot resolve
 an Account, and therefore no Connection — which affects everything under
-`/accounting/*`, `/exact/*` and `/mollie/*`.
+`/accounting/*` and `/exact/*`.
 
 Error handling does carry over: `MapHubErrors` is registered as response
 middleware on the connector (`HubConnector.php:28`), so a raw request throws the
@@ -237,12 +171,10 @@ same exception tree a wrapped one does.
 
 ## Suggested order
 
-1. `POST /v1/connections` — completes the lifecycle for non-OAuth providers
-2. `GET /v1/billing/subscription` — one endpoint, and the consumer app needs to
+1. `GET /v1/billing/subscription` — one endpoint, and the consumer app needs to
    know whether a subscription is active anyway
-3. Mollie payments — the largest block, relevant once the app initiates payments
-   rather than only booking them
-4. Mollie Connect and account subscriptions — follow on from 3
-5. Exact/Snelstart pass-through — deliberately last: anyone who needs these wants
+2. `POST /v1/connections` — only pays off once a provider without an OAuth flow
+   is connected, so it can wait as long as Exact is the only one
+3. Exact pass-through — deliberately last: anyone who needs these wants
    provider-specific behaviour by definition, and is better served by
    `connector()` than by a wrapper that implies provider neutrality
