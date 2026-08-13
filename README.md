@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.10
+composer require emeq/hub-sdk:^0.11
 ```
 
 ```bash
@@ -148,7 +148,8 @@ while ($page->hasMore()) {
 ## API surface
 
 Prefer these from app code: `Facades\Hub`, `Contracts\*`, `Resources\*`,
-`Webhooks\*`, `Events\*`. `Http\*` is package-internal (BFF / Saloon).
+`Webhooks\*`, `Events\*`, and `Testing\*` in your test suite. `Http\*` is
+package-internal (BFF / Saloon).
 
 | SDK | Hub |
 |---|---|
@@ -201,6 +202,7 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 - **Account id from the client** — never trust `X-Account-Id` / `account_external_id` from the request; derive via `ResolvesAccountId`.
 - **`Hub::connections()` is PAT-scoped, not account-scoped** — Hub resolves `/v1/connections/{id}` against the Consumer behind your token and ignores account context, so `get()` / `delete()` reach every connection of every account you own. Verify ownership yourself; never forward a connection id straight from a request.
 - **Connection ids are the `con_…` public id** — the value `integrations()->list()`, `oauth()->init()` and the `connection_revoked` webhook hand back. Hub's numeric key is internal; do not store it. (Hub only started accepting the public id here in August 2026 — older Hub deployments return a 500.)
+- **`documents()` needs a `type`** — Hub rejects the collection read without it (`400 invalid_query`, category `VALIDATION_ERROR`, so the SDK raises `ValidationException`). Valid: `sales_invoice`, `purchase_invoice`, `income`, `expense`, `credit_note`.
 - **Hardcoded providers** — render what `integrations()->list()` returns; no `if ($provider === 'exact')`.
 - **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).
@@ -230,10 +232,49 @@ afterEach(fn () => MockClient::destroyGlobal());
   `saloonphp/saloon` only, not `saloonphp/laravel-plugin`.
 - Key mocks on the URL, not on `Http\Request\*` classes: that namespace is
   package-internal.
-- The SDK ships no fixtures. Shape mocks off the Hub OpenAPI spec
-  ([Further reading](#further-reading)) rather than guesswork — request bodies
-  there are reliable, response schemas are still thin for endpoints that proxy a
-  provider body.
+
+### Canonical fixtures
+
+Inventing accounting payloads makes a test green against a shape Hub never
+sends. `Emeq\HubSdk\Testing\HubMock` ships responses captured from a live Hub
+against a connected provider, redacted — the SDK's own tests read the same
+files:
+
+```php
+use Emeq\HubSdk\Testing\HubMock;
+
+MockClient::global(HubMock::accounting()); // every accounting read at once
+
+// Or one endpoint, mixed with your own mocks:
+MockClient::global([
+    '*/v1/accounting/mapping' => HubMock::mapping(),
+    '*/v1/accounting/documents/validate' => HubMock::validateDocument(valid: false),
+    '*/v1/accounting/capabilities' => HubMock::unauthenticated(),
+]);
+
+// The raw payload, to assert against or to build a variant from:
+$mapping = HubMock::fixture('mapping')['mapping'];
+```
+
+What the captures show, and what a hand-written mock tends to get wrong:
+
+- `validateDocument()` answers `200` either way — read `valid`, never the HTTP
+  status. A clean document still returns findings: a matched relation comes back
+  as `info`, so `findings === []` is not the success test.
+- `referenceData()` is grouped by kind — `{gl: [...], vat: [...], journal: [...]}`.
+  Items carry no `kind` of their own, and `attrs` is `[]` when empty but an
+  object when filled.
+- `mapping()` is wrapped in `{mapping: …}`, and `vat_codes` holds composite keys
+  like `reverse_charge:21` next to plain rates.
+- A document read is a thin projection of the provider's record: `issue_date`,
+  `party.name` and `lines` can all come back empty.
+
+`createDocument()` and `sync()` have no factory. Both are writes, so an honest
+capture means booking a real document and triggering a provider re-sync; a
+guessed shape with the SDK's stamp on it is worse than your own mock.
+
+Fixtures are a snapshot, not a contract — they go stale when Hub changes.
+`tools/capture-fixtures.php` in this repository re-captures them.
 
 ## AI prompt — wire this SDK into your Laravel app
 

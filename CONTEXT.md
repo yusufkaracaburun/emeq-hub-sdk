@@ -31,6 +31,7 @@ Resources/   the public call surface — one class per Hub resource, extending R
 Http/        Saloon connector, request classes, BFF controller. Package-internal.
 Webhooks/    inbound Hub webhooks: envelope, headers, profile, job
 Support/     framework-light helpers
+Testing/     HubMock + the captured fixtures it serves, for consumer suites
 Exceptions/  HubException and its subclasses
 Events/      Laravel events consumers listen for
 ```
@@ -43,7 +44,10 @@ Rules:
   need request data take it as a scalar (`OAuthReturnUrl::fromConfigPath()`
   takes an origin string, not a `Request`).
 - Everything a consumer is meant to touch lives in `Facades\Hub`, `Contracts\*`,
-  `Resources\*`, `Webhooks\*`, `Events\*`. `Http\*` is internal.
+  `Resources\*`, `Webhooks\*`, `Events\*`, `Testing\*`. `Http\*` is internal.
+- `Testing/fixtures/*.json` are captured Hub responses, never invented ones. A
+  new fixture comes from `tools/capture-fixtures.php` and gets redacted before
+  it lands; an endpoint that has not been captured gets no factory.
 - Every failure a consumer can hit is a `HubException` — including configuration
   mistakes, so one catch clause suffices.
 

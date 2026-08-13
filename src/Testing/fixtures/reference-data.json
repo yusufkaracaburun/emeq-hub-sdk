@@ -1,0 +1,65 @@
+{
+    "gl": [
+        {
+            "code": "02810",
+            "label": "Overige vaste bedrijfsmiddelen",
+            "attrs": []
+        },
+        {
+            "code": "04020",
+            "label": "Cumulatieve afschrijvingen deelnemingen groepsmaatschappijen",
+            "attrs": []
+        },
+        {
+            "code": "04660",
+            "label": "Vorderingen op participanten",
+            "attrs": []
+        }
+    ],
+    "vat": [
+        {
+            "code": "0",
+            "label": "BTW 0%",
+            "attrs": {
+                "percentage": 0
+            }
+        },
+        {
+            "code": "1",
+            "label": "BTW laag tarief, exclusief",
+            "attrs": {
+                "percentage": 9
+            }
+        },
+        {
+            "code": "2",
+            "label": "BTW laag tarief, inclusief",
+            "attrs": {
+                "percentage": 9
+            }
+        }
+    ],
+    "journal": [
+        {
+            "code": "10",
+            "label": "Kas (EUR)",
+            "attrs": {
+                "type": 10
+            }
+        },
+        {
+            "code": "30",
+            "label": "NL95INGB0674650867",
+            "attrs": {
+                "type": 12
+            }
+        },
+        {
+            "code": "34",
+            "label": "ING rekening 1",
+            "attrs": {
+                "type": 12
+            }
+        }
+    ]
+}

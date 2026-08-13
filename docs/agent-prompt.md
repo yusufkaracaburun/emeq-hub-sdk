@@ -28,7 +28,7 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.10
+   composer require emeq/hub-sdk:^0.11
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
@@ -78,6 +78,8 @@ DONE WHEN
   optional list test ignores a spoofed request header. Mock with
   `MockClient::global([...])` keyed on URL patterns and destroy it in afterEach —
   `Saloon::fake()` does not exist (no saloonphp/laravel-plugin)
+- Accounting tests mock with `Emeq\HubSdk\Testing\HubMock` (captured real Hub
+  responses), not with hand-written payloads
 - Any createDocument call passes a key derived from the document's external_id,
   not a fresh uuid
 ```

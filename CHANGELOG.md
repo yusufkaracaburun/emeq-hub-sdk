@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.11.0] — 2026-08-13
+
+Reverses the "not done, on purpose" call on test affordances from 0.10.1. That
+call was right about the blocker — the SDK had no fixtures, only invented
+payloads inline in its own tests — and wrong to leave it there. The blocker was
+removable: capture the responses.
+
+### Added
+
+- **`Emeq\HubSdk\Testing\HubMock`** — canonical `MockResponse` factories for the
+  accounting reads, the validation endpoint and the error envelopes, plus
+  `HubMock::accounting()` for wiring the lot into `MockClient::global()` in one
+  line, and `HubMock::fixture()` for the raw payload. New public namespace,
+  hence the minor bump.
+- **`src/Testing/fixtures/*.json`** — 15 responses captured from a live Hub
+  against a connected provider, then redacted. Same files feed the SDK's own
+  tests, so a consumer testing against `HubMock` tests against the shape this
+  package treats as the truth.
+- **`tools/capture-fixtures.php`** — the capture run itself, so the fixtures can
+  be refreshed rather than hand-edited when they go stale. Reads and validation
+  are side-effect free and run by default; booking and re-sync sit behind
+  `--allow-write`. Development only, `export-ignore`d.
+
+### Changed
+
+- **The SDK's own accounting tests now read those fixtures** instead of the
+  payloads they used to invent — the ones that asserted paging behaviour were
+  asserting it against a shape Hub does not send.
+- **README documents what the captures actually show.** `validateDocument()`
+  answers `200` whether or not the document is valid, and a clean document still
+  carries findings — a matched relation comes back as `info`, so `findings === []`
+  is not the success test. `referenceData()` is grouped by kind with no `kind` on
+  the items, `mapping()` is wrapped in `{mapping: …}` and holds composite
+  `reverse_charge:21` keys, and a document read is a thin projection where
+  `issue_date`, `party.name` and `lines` can all be empty.
+- **New pitfall: `documents()` requires a `type`.** Hub answers a collection read
+  without one with `400 invalid_query` / `VALIDATION_ERROR`, which the SDK raises
+  as `ValidationException`.
+
+### Not done, on purpose
+
+- **No factories for `createDocument()` and `sync()`.** Both are writes: an
+  honest capture books a real document and triggers a provider re-sync. A
+  guessed shape carrying this package's authority is worse than a consumer's own
+  mock, so they are documented as absent instead.
+- **Still no typed value objects for the canonical document.** 0.10.1 declined a
+  hand-written mirror of the TypeScript definition in `emeq-app`; capturing real
+  responses turned that from a judgement call into a measurement. That mirror is
+  already drifted from the Hub's committed spec — it is missing
+  `lines[].tax_treatment` and disagrees on the `issue_date` format — and the
+  captured `reference-data` and `mapping` payloads contradict it further: items
+  carry no `kind`, `vat_codes` holds composite keys, and `auto_create_relations`
+  is not in the response at all. A PHP copy of an already-drifted copy would be
+  the third answer to the same question. If types come, they get generated from
+  `api.json`, where drift is a failing CI diff instead of a human error.
+
 ## [0.10.1] — 2026-08-13
 
 Docs only — no API change. Both findings come from the first consumer building

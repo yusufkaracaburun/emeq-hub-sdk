@@ -1,0 +1,18 @@
+{
+    "data": [
+        {
+            "id": "9eab2d17-ce42-4a19-a9ae-0270df2996d0",
+            "code": "02810",
+            "name": "Overige vaste bedrijfsmiddelen",
+            "attributes": []
+        },
+        {
+            "id": "6cfaf088-9e49-4f13-9040-14695e7d7bce",
+            "code": "04020",
+            "name": "Cumulatieve afschrijvingen deelnemingen groepsmaatschappijen",
+            "attributes": []
+        }
+    ],
+    "next_cursor": "MDQwMjA",
+    "has_more": true
+}

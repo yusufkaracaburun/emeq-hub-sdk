@@ -1,0 +1,34 @@
+{
+    "valid": false,
+    "summary": {
+        "errors": 1,
+        "warnings": 2,
+        "infos": 0
+    },
+    "findings": [
+        {
+            "code": "vat_number.checksum",
+            "severity": "error",
+            "path": "party.vat_number",
+            "message": "Het btw-nummer van 'Voorbeeld Debiteur B.V.' klopt niet — het bestaat niet in deze vorm. Een Nederlands btw-nummer is NL + 9 cijfers + B + 2 cijfers (bijvoorbeeld NL000099998B57). De boeking wordt hierop geweigerd.",
+            "current": "NL000000000B01",
+            "suggestion": "Controleer en corrigeer het btw-nummer van de klant."
+        },
+        {
+            "code": "exact.vat_code.unmapped",
+            "severity": "warning",
+            "path": "lines.0.tax_rate",
+            "message": "BTW-tarief 13.5% is nog niet ingericht voor deze administratie — de boeking wordt hierop geweigerd. Richt het tarief in of gebruik een tarief dat de administratie al kent.",
+            "current": 13.5,
+            "suggestion": null
+        },
+        {
+            "code": "exact.relation.new",
+            "severity": "warning",
+            "path": "party",
+            "message": "Afnemer staat nog niet in de administratie — de boeking wordt geweigerd. Voeg de relatie toe in de administratie, of laat automatisch aanmaken inschakelen op deze koppeling.",
+            "current": "Voorbeeld Debiteur B.V.",
+            "suggestion": null
+        }
+    ]
+}

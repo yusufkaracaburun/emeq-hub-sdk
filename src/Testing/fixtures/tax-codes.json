@@ -1,0 +1,24 @@
+{
+    "data": [
+        {
+            "id": "0",
+            "code": "0",
+            "name": "BTW 0%",
+            "rate": 0,
+            "attributes": {
+                "percentage": 0
+            }
+        },
+        {
+            "id": "1",
+            "code": "1",
+            "name": "BTW laag tarief, exclusief",
+            "rate": 9,
+            "attributes": {
+                "percentage": 9
+            }
+        }
+    ],
+    "next_cursor": "MQ",
+    "has_more": true
+}

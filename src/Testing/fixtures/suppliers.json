@@ -1,0 +1,18 @@
+{
+    "data": [
+        {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "name": "Voorbeeld Crediteur B.V.",
+            "roles": [
+                "debtor",
+                "creditor"
+            ],
+            "code": "1000002",
+            "vat_number": "NL000099998B57",
+            "email": null,
+            "attributes": []
+        }
+    ],
+    "next_cursor": null,
+    "has_more": false
+}

@@ -1,0 +1,7 @@
+{
+    "code": "unauthenticated",
+    "message": "Unauthenticated.",
+    "error": "unauthenticated",
+    "category": "AUTHENTICATION_ERROR",
+    "request_id": "01JZZ0000000000000000000RQ"
+}

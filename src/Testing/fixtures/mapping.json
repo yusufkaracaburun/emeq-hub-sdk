@@ -1,0 +1,20 @@
+{
+    "mapping": {
+        "vat_codes": {
+            "21": "3",
+            "9": "1",
+            "0": "0",
+            "reverse_charge:21": "6",
+            "reverse_charge:9": "7"
+        },
+        "journals": {
+            "sales": "80",
+            "purchase": "70"
+        },
+        "gl_accounts": {
+            "omzet": "89001",
+            "kosten": "40004",
+            "_default": "40004"
+        }
+    }
+}

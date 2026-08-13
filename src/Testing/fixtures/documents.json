@@ -1,0 +1,40 @@
+{
+    "data": [
+        {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "type": "sales_invoice",
+            "number": "26800001",
+            "external_id": "invoice-1",
+            "issue_date": null,
+            "due_date": null,
+            "reference": "F-2026-0001",
+            "party": {
+                "id": "11111111-1111-4111-8111-111111111111",
+                "name": null
+            },
+            "journal": "80",
+            "currency": "EUR",
+            "net_total": 0,
+            "lines": []
+        },
+        {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "type": "sales_invoice",
+            "number": "26800002",
+            "external_id": "invoice-2",
+            "issue_date": null,
+            "due_date": null,
+            "reference": "F-2026-0002",
+            "party": {
+                "id": "11111111-1111-4111-8111-111111111111",
+                "name": null
+            },
+            "journal": "80",
+            "currency": "EUR",
+            "net_total": 0,
+            "lines": []
+        }
+    ],
+    "next_cursor": null,
+    "has_more": false
+}

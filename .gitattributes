@@ -12,6 +12,7 @@
 /tests              export-ignore
 /docs               export-ignore
 /CONTEXT.md         export-ignore
+/tools              export-ignore
 /.editorconfig      export-ignore
 
 # Laravel Boost + AI agent tooling — development only, never shipped.

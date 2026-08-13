@@ -12,6 +12,7 @@ use Emeq\HubSdk\Http\Request\Accounting\GetAccountingRequest;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
 use Emeq\HubSdk\Hub;
+use Emeq\HubSdk\Testing\HubMock;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 
@@ -116,16 +117,14 @@ it('sends accounting list requests with account header and query', function (): 
     // which collides with Saloon\Http\Request::$query and fatals at class-load —
     // every accounting GET was unusable.
     $mock = new MockClient([
-        GetAccountingRequest::class => MockResponse::make([
-            ['id' => 'doc-1'],
-        ], 200),
+        GetAccountingRequest::class => HubMock::documents(),
     ]);
 
     app(HubConnector::class)->withMockClient($mock);
 
     $page = app(Hub::class)->accounting()->documents(['type' => 'sales_invoice'], 'tenant-1');
 
-    expect($page->items)->toHaveCount(1);
+    expect($page->items)->toBe(HubMock::fixture('documents')['data']);
 
     $mock->assertSent(function (GetAccountingRequest $request): bool {
         return $request->resolveEndpoint() === '/accounting/documents'
@@ -135,34 +134,31 @@ it('sends accounting list requests with account header and query', function (): 
 
 it('keeps the cursor from a paginated accounting collection', function (): void {
     // Hub answers collection reads with {data, next_cursor}; dropping the cursor
-    // would make paging impossible.
+    // would make paging impossible. Captured on an administration with more
+    // ledger accounts than fit in one page.
     $mock = new MockClient([
-        GetAccountingRequest::class => MockResponse::make([
-            'data' => [['id' => 'doc-1'], ['id' => 'doc-2']],
-            'next_cursor' => 'eyJvIjoyfQ==',
-        ], 200),
+        GetAccountingRequest::class => HubMock::ledgerAccounts(),
     ]);
 
     app(HubConnector::class)->withMockClient($mock);
 
-    $page = app(Hub::class)->accounting()->documents(['type' => 'sales_invoice'], 'tenant-1');
+    $page = app(Hub::class)->accounting()->ledgerAccounts([], 'tenant-1');
 
-    expect($page->items)->toBe([['id' => 'doc-1'], ['id' => 'doc-2']])
-        ->and($page->nextCursor)->toBe('eyJvIjoyfQ==')
+    $fixture = HubMock::fixture('ledger-accounts');
+
+    expect($page->items)->toBe($fixture['data'])
+        ->and($page->nextCursor)->toBe($fixture['next_cursor'])
         ->and($page->hasMore())->toBeTrue();
 });
 
 it('reports the last page as having no cursor', function (): void {
     $mock = new MockClient([
-        GetAccountingRequest::class => MockResponse::make([
-            'data' => [['id' => 'doc-9']],
-            'next_cursor' => null,
-        ], 200),
+        GetAccountingRequest::class => HubMock::customers(),
     ]);
 
     app(HubConnector::class)->withMockClient($mock);
 
-    $page = app(Hub::class)->accounting()->taxCodes([], 'tenant-1');
+    $page = app(Hub::class)->accounting()->customers([], 'tenant-1');
 
     expect($page->nextCursor)->toBeNull()
         ->and($page->hasMore())->toBeFalse();
