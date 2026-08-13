@@ -1,5 +1,47 @@
 # Changelog
 
+## [Unreleased]
+
+### Documentation
+
+- **README required `^0.7`.** On a 0.x that caret pins the minor, so consumers
+  following the install block got 0.7.x — without the 0.9.0 route-auth guard.
+  Both occurrences now require `^0.9`.
+- **The `['name', 'id']` index claim is now conditional.** 0.9.0 documented it as
+  one "the dedupe query needs". Measured on MySQL 5.7 / InnoDB with the real
+  query: on a Hub-only `webhook_calls` the optimizer never picks it (`key=PRIMARY`
+  at 50k and 200k rows, timings equal to having no index). It does pay off once
+  the table carries several webhook configs — 21.5 ms → 12.4 ms at 50k rows with
+  Hub at 20%. Documented as such.
+- **README split.** 398 → 245 lines. Webhook wiring, connection placement and
+  dedupe moved to `docs/webhooks.md`; the agent prompt to
+  `docs/agent-prompt.md`; Boost / symlink tooling to
+  `docs/local-development.md`. `docs/` is `export-ignore`d, so these are
+  GitHub-only — the same choice `CONTEXT.md` already makes.
+
+### Fixed
+
+- **`webhookConfigName()` no longer hardcodes `emeq-hub`.** It reads
+  `hub.webhook.name` — the value `HubServiceProvider` registers the Spatie config
+  under. A consumer who renamed it had `alreadyProcessed()` filtering
+  `webhook_calls.name` on a name no row carries, so dedupe matched nothing.
+- **The auth-family check no longer accepts names Laravel cannot resolve to
+  auth.** Aliases resolve by exact array key, so `AUTH:SANCTUM` was passed
+  through as a class name; `auth.session` aliases `AuthenticateSession`, which
+  invalidates sessions on password change and authenticates nobody. Both used to
+  satisfy the guard. Accepted entries are now `auth`, `auth:*` and `auth.basic`.
+
+### Changed
+
+- **`HubWebhookDeduplicator::OPAQUE_EVENT_IDS` is a constructor argument.**
+  Widening the sentinel list took a subclass to redefine a `protected const`;
+  it is now the third constructor parameter, defaulting to `['no-id']`.
+- **`HubRouteMiddleware::assertAuthenticated()` drops its
+  `$allowUnauthenticated` flag.** The escape hatch is read once by the new
+  `HubRouteMiddleware::validated()`, which is now the only way to obtain the
+  configured stack — `routes/hub.php` no longer re-derives what
+  `packageBooted()` validated.
+
 ## [0.9.1] — 2026-08-13
 
 ### Documentation

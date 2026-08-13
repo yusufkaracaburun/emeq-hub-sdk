@@ -18,24 +18,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 use Spatie\WebhookClient\Models\WebhookCall;
 use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
 
 beforeEach(function () {
     config()->set('hub.webhook.secret', 'test-webhook-secret');
 
-    Schema::dropIfExists('webhook_calls');
-    Schema::create('webhook_calls', function ($table) {
-        $table->bigIncrements('id');
-        $table->string('name');
-        $table->string('url', 512);
-        $table->json('headers')->nullable();
-        $table->json('payload')->nullable();
-        $table->json('attachments')->nullable();
-        $table->text('exception')->nullable();
-        $table->timestamps();
-    });
+    // The published stub itself, so the table these tests run against is the
+    // one consumers migrate — including its dedupe index.
+    $migration = require __DIR__.'/../../database/migrations/create_webhook_calls_table.php.stub';
+    $migration->down();
+    $migration->up();
 });
 
 function makeWebhookCall(array $overrides = []): WebhookCall
@@ -337,16 +330,17 @@ test('a subclass can widen the opaque list', function () {
     (new ProcessHubWebhookJob($second))->handle();
     Event::assertNotDispatched(HubWebhookReceived::class);
 
-    // The sentinel list moved onto the deduplicator, so widening it now means
-    // subclassing that and pointing the job's one dedupe hook at it.
+    // The sentinel list moved onto the deduplicator, so widening it is one
+    // constructor argument from the job's one dedupe hook.
     (new class($second) extends ProcessHubWebhookJob
     {
         protected function deduplicator(): HubWebhookDeduplicator
         {
-            return new class($this->webhookConfigName(), $this->accountId) extends HubWebhookDeduplicator
-            {
-                protected const OPAQUE_EVENT_IDS = ['no-id', 'placeholder'];
-            };
+            return new HubWebhookDeduplicator(
+                $this->webhookConfigName(),
+                $this->accountId,
+                ['no-id', 'placeholder'],
+            );
         }
     })->handle();
 

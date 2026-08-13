@@ -8,14 +8,14 @@ SDK release. Partner wire stays in the Hub + `emeq/*-api` packages — this SDK
 does **not** expose per-partner pass-through.
 
 Payload shapes, OAuth UX, and OpenAPI live in the Hub docs — see
-[Further reading](#further-reading). This README covers package install, call
-sites, and inbound webhook wiring.
+[Further reading](#further-reading). This README covers install, call sites and
+the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ## Install
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.7
+composer require emeq/hub-sdk:^0.9
 ```
 
 ```bash
@@ -47,20 +47,16 @@ EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 1. Publish config + migrations (`hub:install` or tags above).
 2. Set `EMEQ_HUB_*` in `.env`.
 3. Bind `ResolvesAccountId` (`accountId()` + `displayName()`).
-4. Bind `ResolvesWebhookAccount` (tenancy / status gates for inbound webhooks).
-5. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except that path.
-6. Migrate `webhook_calls` on the webhook DB — **the tenant DB if multi-DB**, see
-   [Connection placement](#connection-placement). The package does **not**
-   auto-run migrations.
-7. Listen for `HubConnectionRevoked` / `HubWebhookReceived` / `HubWebhookIgnored`
-   (or override job hooks). Multi-DB: set `hub.webhook.job` (+ `profile`) in
-   `config/hub.php` and use `SerializesHubWebhookByIds` on that job.
+4. Receiving Hub webhooks? Bind `ResolvesWebhookAccount`, register the route and
+   migrate `webhook_calls` — [`docs/webhooks.md`](docs/webhooks.md). The package
+   does **not** auto-run migrations.
 
 The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
 (default `false`). Middleware must be non-empty **and carry an `auth`-family
-entry** (`auth`, `auth:sanctum`, `auth.basic`, …) — otherwise boot fails. If your
-auth middleware is named something else (`tenant.auth`), set
-`hub.routes.allow_unauthenticated` to `true` to declare that deliberate.
+entry** — exactly `auth`, `auth:*` or `auth.basic` (case-sensitive;
+`auth.session` does not count). Otherwise boot fails. If your auth middleware is
+named something else (`tenant.auth`), set `hub.routes.allow_unauthenticated` to
+`true` to declare that deliberate.
 
 | Method | Path | Action |
 |---|---|---|
@@ -102,38 +98,9 @@ $this->app->bind(ResolvesAccountId::class, HubAccountIdResolver::class);
 ## Inbound Hub webhooks
 
 Spatie `webhook-client` bases live in the SDK; apps only wire tenancy + handlers.
-One published file: `config/hub.php`. At boot the package upserts the Hub entry
-into Spatie’s `webhook-client.configs` from `hub.webhook.*`.
-
-1. Publish `config/hub.php` (`hub:install` / `--tag=hub-config`) — defaults use
-   `HubWebhookProfile` / `ProcessHubWebhookJob`.
-2. Bind `ResolvesWebhookAccount` (`account_id` → tenant; may switch DB).
-3. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except.
-4. `php artisan vendor:publish --tag=hub-migrations` then migrate on the webhook DB
-   (tenant DB if multi-DB).
-5. Multi-DB: set `hub.webhook.job` (and optionally `profile`) in `config/hub.php`
-   to your subclass that uses `SerializesHubWebhookByIds`.
-
-Signing secret comes from `config('hub.webhook.secret')` (`EMEQ_HUB_WEBHOOK_SECRET`).
-
-### Connection placement
-
-`ProcessHubWebhookJob` binds your account context **first**, then reads
-`webhook_calls` — both `resolveWebhookCall()` and the deduplication query run on
-whatever connection is default *after* `bindAccountContext()`.
-
-So in a multi-DB app:
-
-- `webhook_calls` must live in the **tenant** DB, not the central one.
-- `ResolvesWebhookAccount::prepare()` must switch the connection **before**
-  Spatie stores the call, so the row lands in that same tenant DB.
-
-Getting this wrong fails **silently**: `resolveWebhookCall()` returns `null` and
-every delivery is logged as `hub.webhook.skipped` / `webhook_call_missing` — no
-exception, no failed job, no retry.
-
-**Domain logic:** listen for Laravel events — do not cargo-cult empty profile/job
-subclasses unless you need tenancy hooks:
+One published file: `config/hub.php` — at boot the package upserts the Hub entry
+into Spatie’s `webhook-client.configs` from `hub.webhook.*`. Listen for these
+rather than cargo-culting empty profile/job subclasses:
 
 | Event | When |
 |---|---|
@@ -141,33 +108,8 @@ subclasses unless you need tenancy hooks:
 | `HubConnectionRevoked` | `connection.revoked` |
 | `HubWebhookIgnored` | Other canonical events (default: log only) |
 
-Override `onConnectionRevoked()` / `onIgnored()` on a job subclass if you prefer
-hooks over listeners. `HubWebhookEvent` is a backed enum (keep in sync with Hub
-`CanonicalEvent`); `$envelope->event` is an enum case, and an event added by Hub
-after your SDK release decodes to `HubWebhookEvent::UNMAPPED` rather than
-throwing.
-
-```php
-if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
-$wireValue = $envelope->event->value; // 'connection.revoked'
-```
-
-Deduplication takes a cache lock per account + `X-Emeq-Event-Id` so concurrent
-redeliveries cannot both process, while one event id delivered to two accounts
-still processes twice. That store must support atomic locks: Laravel's `database`
-default needs the framework's `cache_locks` table, or point
-`EMEQ_HUB_WEBHOOK_LOCK_STORE` at redis/memcached. A failed job records its
-exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicate.
-
-Some event ids identify nothing: Hub sends the literal `no-id` when the partner
-omitted an id of its own, so unrelated events share it. Those are processed like
-a webhook with no event id at all — never deduplicated. To recognise more,
-subclass `HubWebhookDeduplicator` (overriding its `OPAQUE_EVENT_IDS`) and return
-it from `ProcessHubWebhookJob::deduplicator()`.
-
-The published `webhook_calls` migration carries a `['name', 'id']` index the
-dedupe query needs. If you migrated before 0.9.0, add it yourself — see the
-changelog.
+Wiring, multi-DB connection placement (**gets this wrong and it fails
+silently**), and deduplication: [`docs/webhooks.md`](docs/webhooks.md).
 
 ## Usage
 
@@ -264,83 +206,9 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 
 ## AI prompt — wire this SDK into your Laravel app
 
-Paste the prompt below into your coding agent (Cursor, Claude Code, …) to
-install and configure `emeq/hub-sdk` against your tenant model. Fill in the
-`{…}` placeholders before pasting.
-
-The prompt covers **install + config + account binding + one Hub-portal CTA**.
-Integration BFF routes ship with the package (`EMEQ_HUB_ROUTES`). Do **not**
-build per-provider connect UI — Hub’s hosted `/connect` page is the single
-source of truth.
-
-```text
-Install and configure emeq/hub-sdk in my Laravel app so we can call the emeq Hub
-(/v1) server-side. Read the package README first:
-https://github.com/yusufkaracaburun/emeq-hub-sdk
-
-CONTEXT
-- App: {Laravel 13 / path to repo}
-- Hub base URL: {https://hub.emeq.nl}
-- PAT from env (empty or known): EMEQ_HUB_PAT
-- Auth middleware for Hub routes: {api,auth:sanctum / api,auth:api / …}
-- OAuth return path on my host: {/settings/integrations?oauth=1 — or empty}
-- Tenants are distinguished by: {subdomain / instance.id / company_id / …
-  — describe how you resolve the current tenant}
-- Hub account `external_id` = {stable internal tenant id, e.g. instance.id —
-  not email or domain}
-
-DO THIS (in order)
-1. Add Composer VCS repo and require:
-   composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.7
-2. Set in `.env` / `.env.example`:
-   EMEQ_HUB_BASE={https://hub.emeq.nl}
-   EMEQ_HUB_PAT=
-   EMEQ_HUB_TIMEOUT=30
-   EMEQ_HUB_WEBHOOK_SECRET=
-   EMEQ_HUB_ROUTES=true
-   EMEQ_HUB_ROUTES_PREFIX=api
-   EMEQ_HUB_ROUTES_MIDDLEWARE={api,auth:sanctum}
-   EMEQ_HUB_OAUTH_RETURN_PATH={/settings/integrations?oauth=1}
-3. Run `php artisan hub:install` (publishes hub-config + hub-migrations).
-4. Implement `Emeq\HubSdk\Contracts\ResolvesAccountId` in my app
-   (e.g. `App\Integrations\Hub\HubAccountIdResolver`) mapping the current
-   tenant to Hub `external_id` per CONTEXT above — server-side only.
-   `displayName()` may return null.
-5. Bind that class in `AppServiceProvider::register()` to
-   `ResolvesAccountId::class`.
-6. Explicitly set `EMEQ_HUB_ROUTES=true` (package default is false). Middleware
-   must be non-empty. Do NOT hand-roll Hub HTTP clients or duplicate the
-   package BFF routes.
-7. UI: one “Manage integrations” button that POSTs
-   `/{prefix}/integrations/connect-session` and redirects to `response.url`.
-   Users connect/disconnect on Hub — do NOT build per-provider OAuth buttons
-   or revoke flows in my app.
-8. Optional: GET `/{prefix}/integrations` for a read-only status strip.
-   Do not store tokens, connection state, or provider credentials in my DB.
-9. Inbound webhooks (if Hub fans out to this app): bind
-   `ResolvesWebhookAccount`, register `Route::webhooks('webhooks/emeq-hub',
-   'emeq-hub')` + CSRF except, migrate `webhook_calls`, listen for
-   `HubConnectionRevoked` (and related Events\*). Webhook profile/job/secret
-   live under `config('hub.webhook')` — do not publish a separate
-   `webhook-client.php` for Hub, and do not invent a custom HMAC endpoint.
-10. Errors: HubException subclasses map to JSON on the BFF routes; when calling
-   Hub yourself, rethrow or map and log `requestId` when set.
-
-DO NOT
-- Browser / direct calls to the Hub (PAT stays server-side)
-- Install emeq/exact-api or other partner SDKs in this consumer app
-- Build per-partner pass-through wrappers or per-provider connect UI
-- Take X-Account-Id / account_external_id from the client request
-- Re-implement connect-session / list routes in my app (SDK owns those)
-
-DONE WHEN
-- composer show emeq/hub-sdk works
-- ResolvesAccountId is bound
-- Package routes respond under my auth middleware
-- Feature/smoke test: connect-session (MockClient) proves account id is derived
-  server-side; optional list test ignores a spoofed request header
-```
+A ready-to-paste prompt for your coding agent (Cursor, Claude Code, …) that
+installs and configures the SDK against your tenant model:
+[`docs/agent-prompt.md`](docs/agent-prompt.md).
 
 ## Growth model
 
@@ -373,26 +241,5 @@ composer analyse     # Larastan
 composer format      # Pint
 ```
 
-This repository ships [Laravel Boost](https://laravel.com/docs/boost) for AI agents. Because a package has no application, Boost is booted through the development-only `artisan` shim in the repository root — it creates a bare app rooted at the package so `base_path()` resolves here instead of inside `vendor/`. Everything Boost writes (`artisan`, `boost.json`, `config/boost.php`, `CLAUDE.md`, `.mcp.json`, `.ai/`, agent directories) is `export-ignore`d and never reaches consumers.
-
-```bash
-php artisan boost:install   # (re)wire guidelines, skills and MCP config
-php artisan boost:update    # refresh guidelines after a dependency bump
-```
-
-MCP tools that need a running application (database, browser logs, application log, URL generation) are disabled in `config/boost.php`; `application-info`, `search-docs` and `record-rule` remain. Project guidelines specific to this package live in `.ai/guidelines/package.blade.php` — edit there, then re-run `boost:install --guidelines`, never edit the generated block in `CLAUDE.md` by hand.
-
-Every agent artefact exists exactly once; the per-agent paths are symlinks:
-
-| Physical file | Symlinks pointing at it |
-| --- | --- |
-| `CLAUDE.md` (generated) | `AGENTS.md` |
-| `.mcp.json` | `.cursor/mcp.json` |
-| `.ai/skills/<name>` | `.claude/skills/<name>`, `.cursor/skills/<name>` |
-
-Boost writes through symlinks, so `boost:install` and `boost:update` keep this layout intact — verified against a full `--guidelines --mcp --skills` run. The trade-off is on skills only: anything under `.ai/skills` counts as a user skill and shadows the vendor copy, so Boost stops refreshing it. To pull in upstream changes for a Boost-shipped skill:
-
-```bash
-rm -rf .ai/skills/<name> .claude/skills/<name> .cursor/skills/<name>
-php artisan boost:install --skills
-```
+Laravel Boost wiring, the `artisan` shim and the symlinked agent artefacts:
+[`docs/local-development.md`](docs/local-development.md).

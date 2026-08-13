@@ -295,8 +295,15 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         event(new HubWebhookIgnored($envelope, $eventId, $requestId));
     }
 
+    /**
+     * The name HubServiceProvider registered the Spatie config under —
+     * `alreadyProcessed()` filters `webhook_calls.name` on it, so a hardcoded
+     * literal would match nothing for a consumer who renamed the config.
+     */
     protected function webhookConfigName(): string
     {
-        return 'emeq-hub';
+        $name = config('hub.webhook.name', 'emeq-hub');
+
+        return is_string($name) && $name !== '' ? $name : 'emeq-hub';
     }
 }

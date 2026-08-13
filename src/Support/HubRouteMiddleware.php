@@ -12,6 +12,25 @@ use InvalidArgumentException;
 final class HubRouteMiddleware
 {
     /**
+     * The configured stack, normalized and checked. The only way to obtain the
+     * list, so a caller cannot apply middleware nobody asserted on.
+     *
+     * @return list<string>
+     */
+    public static function validated(): array
+    {
+        $middleware = self::normalize(config('hub.routes.middleware'));
+
+        self::assertNotEmpty($middleware);
+
+        if (! (bool) config('hub.routes.allow_unauthenticated', false)) {
+            self::assertAuthenticated($middleware);
+        }
+
+        return $middleware;
+    }
+
+    /**
      * @return list<string>
      */
     public static function normalize(mixed $middleware): array
@@ -52,12 +71,8 @@ final class HubRouteMiddleware
      *
      * @param  list<string>  $middleware
      */
-    public static function assertAuthenticated(array $middleware, bool $allowUnauthenticated = false): void
+    public static function assertAuthenticated(array $middleware): void
     {
-        if ($allowUnauthenticated) {
-            return;
-        }
-
         foreach ($middleware as $entry) {
             if (self::looksLikeAuth($entry)) {
                 return;
@@ -71,12 +86,20 @@ final class HubRouteMiddleware
         );
     }
 
+    /**
+     * Matched case-sensitively because Laravel resolves aliases by exact array
+     * key: `AUTH:SANCTUM` never reaches the auth middleware, it is passed
+     * through as a class name. Accepting it would pass a stack that has no
+     * working auth — the failure this guard exists to stop.
+     *
+     * `auth.session` is excluded for the same reason: it aliases
+     * AuthenticateSession, which invalidates sessions on password change and
+     * authenticates nobody.
+     */
     private static function looksLikeAuth(string $middleware): bool
     {
-        $name = strtolower($middleware);
-
-        return $name === 'auth'
-            || str_starts_with($name, 'auth:')
-            || str_starts_with($name, 'auth.');
+        return $middleware === 'auth'
+            || $middleware === 'auth.basic'
+            || str_starts_with($middleware, 'auth:');
     }
 }

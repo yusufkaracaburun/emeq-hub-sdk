@@ -19,11 +19,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Validated in HubServiceProvider::packageBooted() — non-empty and carrying an
-// auth entry — before this file is loaded. The shipped default lives in
-// config/hub.php; do not restate it here.
+// validated() is the only way to obtain the stack — non-empty and carrying an
+// auth entry — so the middleware applied here is the middleware asserted on.
 $prefix = trim((string) config('hub.routes.prefix', 'api'), '/');
-$middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
+$middleware = HubRouteMiddleware::validated();
 
 Route::middleware($middleware)
     ->prefix($prefix)

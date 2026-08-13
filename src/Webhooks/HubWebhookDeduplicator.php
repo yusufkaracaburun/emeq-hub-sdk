@@ -23,16 +23,14 @@ use Spatie\WebhookClient\Models\WebhookCall;
 class HubWebhookDeduplicator
 {
     /**
-     * X-Emeq-Event-Id values Hub reuses across unrelated events, so they
-     * identify nothing. See {@see identityFor()}.
-     *
-     * @var list<string>
+     * @param  list<string>  $opaqueEventIds  X-Emeq-Event-Id values Hub reuses
+     *                                        across unrelated events, so they
+     *                                        identify nothing. See {@see identityFor()}.
      */
-    protected const OPAQUE_EVENT_IDS = ['no-id'];
-
     public function __construct(
         protected readonly string $configName,
         protected readonly string $accountId,
+        protected readonly array $opaqueEventIds = ['no-id'],
     ) {}
 
     /**
@@ -43,8 +41,9 @@ class HubWebhookDeduplicator
      * Snelstart's controller falls back to the literal string `no-id`, so many
      * unrelated events arrive sharing it. Treating that as an identity makes the
      * first one swallow all the rest. Such values are handled exactly like a
-     * missing header: processed, never deduplicated. Subclasses recognise
-     * further sentinels by overriding {@see OPAQUE_EVENT_IDS}.
+     * missing header: processed, never deduplicated. Consumers recognise
+     * further sentinels by passing them to the constructor from
+     * {@see ProcessHubWebhookJob::deduplicator()} — no subclass needed.
      */
     public function identityFor(?string $eventId): ?string
     {
@@ -52,7 +51,7 @@ class HubWebhookDeduplicator
             return null;
         }
 
-        return in_array($eventId, static::OPAQUE_EVENT_IDS, true) ? null : $eventId;
+        return in_array($eventId, $this->opaqueEventIds, true) ? null : $eventId;
     }
 
     /**

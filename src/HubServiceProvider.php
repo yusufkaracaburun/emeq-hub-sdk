@@ -72,12 +72,10 @@ class HubServiceProvider extends PackageServiceProvider
             return;
         }
 
-        $middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
-        HubRouteMiddleware::assertNotEmpty($middleware);
-        HubRouteMiddleware::assertAuthenticated(
-            $middleware,
-            (bool) config('hub.routes.allow_unauthenticated', false),
-        );
+        // Under route:cache the route file never runs, so this is the only
+        // place the guard fires. Result unused: routes/hub.php asks for the
+        // same validated stack when it does run.
+        HubRouteMiddleware::validated();
 
         $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
     }

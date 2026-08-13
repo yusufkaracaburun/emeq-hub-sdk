@@ -20,17 +20,20 @@ it('ships a throttled default middleware stack', function (): void {
 });
 
 it('ships a default the boot guard accepts', function (): void {
-    // packageBooted() runs both asserts against this value, so a default that
-    // fails them would make EMEQ_HUB_ROUTES=true unbootable out of the box.
+    // packageBooted() calls validated() against this value, so a default that
+    // fails it would make EMEQ_HUB_ROUTES=true unbootable out of the box.
     $default = require __DIR__.'/../../config/hub.php';
+    config()->set('hub.routes', $default['routes']);
 
-    HubRouteMiddleware::assertNotEmpty($default['routes']['middleware']);
-    HubRouteMiddleware::assertAuthenticated(
-        $default['routes']['middleware'],
-        $default['routes']['allow_unauthenticated'],
-    );
+    expect(HubRouteMiddleware::validated())->toBe($default['routes']['middleware'])
+        ->and($default['routes']['allow_unauthenticated'])->toBeFalse();
+});
 
-    expect($default['routes']['allow_unauthenticated'])->toBeFalse();
+it('skips the auth assert only when allow_unauthenticated declares it deliberate', function (): void {
+    config()->set('hub.routes.middleware', ['api']);
+    config()->set('hub.routes.allow_unauthenticated', true);
+
+    expect(HubRouteMiddleware::validated())->toBe(['api']);
 });
 
 it('refuses empty middleware', function (): void {
@@ -45,15 +48,15 @@ it('refuses a middleware stack with no auth entry', function (): void {
 
 it('accepts the auth middleware family', function (string $entry): void {
     HubRouteMiddleware::assertAuthenticated(['api', $entry]);
+})->with(['auth', 'auth:sanctum', 'auth:api', 'auth.basic'])->throwsNoExceptions();
 
-    expect(true)->toBeTrue();
-})->with(['auth', 'auth:sanctum', 'auth:api', 'auth.basic', 'AUTH:SANCTUM']);
-
-it('allows an unauthenticated stack only when declared deliberate', function (): void {
-    HubRouteMiddleware::assertAuthenticated(['api'], allowUnauthenticated: true);
-
-    expect(true)->toBeTrue();
-});
+it('refuses names Laravel cannot resolve to auth', function (string $entry): void {
+    // Aliases resolve by exact array key, so `AUTH:SANCTUM` is passed through as
+    // a class name; `auth.session` aliases AuthenticateSession, which
+    // authenticates nobody. Either would pass a stack with no working auth.
+    HubRouteMiddleware::assertAuthenticated(['api', $entry]);
+})->with(['AUTH:SANCTUM', 'auth.session'])
+    ->throws(InvalidArgumentException::class, 'no auth middleware');
 
 it('builds return url from a relative path', function (): void {
     expect(OAuthReturnUrl::fromConfigPath('https://app.example.test', '/settings?oauth=1'))
