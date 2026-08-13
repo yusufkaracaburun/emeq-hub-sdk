@@ -19,6 +19,10 @@ use Emeq\HubSdk\Http\Request\Connections\GetConnectionRequest;
  * Multi-tenant consumers must therefore verify ownership themselves before
  * handing an id to `get()` / `delete()` — never forward one straight from a
  * request. See the README pitfalls.
+ *
+ * Pass the `con_…` public id — the value `integrations()->list()`, `oauth()->init()`
+ * and the `connection_revoked` webhook all hand back. Hub's own numeric key is
+ * accepted too, but it is internal; do not store it.
  */
 class Connections extends Resource
 {

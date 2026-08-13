@@ -256,6 +256,7 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 - **PAT in the browser** — always call Hub from your Laravel backend via this SDK.
 - **Account id from the client** — never trust `X-Account-Id` / `account_external_id` from the request; derive via `ResolvesAccountId`.
 - **`Hub::connections()` is PAT-scoped, not account-scoped** — Hub resolves `/v1/connections/{id}` against the Consumer behind your token and ignores account context, so `get()` / `delete()` reach every connection of every account you own. Verify ownership yourself; never forward a connection id straight from a request.
+- **Connection ids are the `con_…` public id** — the value `integrations()->list()`, `oauth()->init()` and the `connection_revoked` webhook hand back. Hub's numeric key is internal; do not store it. (Hub only started accepting the public id here in August 2026 — older Hub deployments return a 500.)
 - **Hardcoded providers** — render what `integrations()->list()` returns; no `if ($provider === 'exact')`.
 - **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).

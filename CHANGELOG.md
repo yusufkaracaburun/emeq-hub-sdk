@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.1] — 2026-08-13
+
+### Documentation
+
+- **Which connection id to pass.** `Hub::connections()->get()` / `->delete()`
+  take the `con_…` public id — the value `integrations()->list()`,
+  `oauth()->init()` and the `connection_revoked` webhook all hand back. Hub's
+  numeric primary key is accepted but internal.
+
+  Hub itself only started accepting the public id on those two endpoints in
+  August 2026; before that the documented connect flow returned a 500
+  (`TypeError`, the controller type-hinted `int`). Nothing in the SDK changed —
+  it already passed `string|int` straight through.
+
+### Changed
+
+- `dev-master` branch alias points at `0.9.x-dev`.
+
 ## [0.9.0] — 2026-08-12
 
 Follow-up to the 2026-08-12 Laravel-extension audit. Five 🟠 and two 🟡, three of
