@@ -77,6 +77,54 @@ it('distinguishes a clean validation from one with findings', function (): void 
         ->and(array_column($failing['findings'], 'severity'))->toContain('error');
 });
 
+it('books a document and replays the same key onto the same booking', function (): void {
+    MockClient::global(['*/v1/accounting/documents' => HubMock::createDocument()]);
+
+    $document = ['type' => 'sales_invoice', 'external_id' => 'invoice-1'];
+
+    $booked = app(Hub::class)->accounting()->createDocument(
+        $document,
+        idempotencyKey: $document['external_id'],
+        accountId: ACCOUNT,
+    );
+
+    // Captured live: a retry carrying the same key answers with the same
+    // provider reference, so the document is booked once.
+    $replayed = app(Hub::class)->accounting()->createDocument(
+        $document,
+        idempotencyKey: $document['external_id'],
+        accountId: ACCOUNT,
+    );
+
+    expect($booked['status'])->toBe('posted')
+        ->and($booked['external_ref'])->not->toBeNull()
+        ->and($replayed)->toBe($booked);
+});
+
+it('answers a booking with the list read when the map has no room for both', function (): void {
+    // Saloon keys mocks on the URL alone, and POST /accounting/documents shares
+    // its URL with the list read. accounting() answers the read, so a test that
+    // books has to key that URL itself — this pins the trap so the docblock
+    // saying so cannot quietly stop being true.
+    MockClient::global(HubMock::accounting());
+
+    $booked = app(Hub::class)->accounting()->createDocument(
+        ['type' => 'sales_invoice', 'external_id' => 'invoice-1'],
+        idempotencyKey: 'invoice-1',
+        accountId: ACCOUNT,
+    );
+
+    expect($booked)->toBe(HubMock::fixture('documents'))
+        ->and($booked)->not->toBe(HubMock::fixture('create-document'));
+});
+
+it('reports what a re-sync pulled', function (): void {
+    MockClient::global(HubMock::accounting());
+
+    expect(app(Hub::class)->accounting()->sync([], ACCOUNT))
+        ->toBe(HubMock::fixture('sync'));
+});
+
 it('maps the captured error envelopes to the documented exceptions', function (): void {
     $cases = [
         [HubMock::unauthenticated(), AuthenticationException::class],
@@ -108,6 +156,8 @@ it('serves each factory from its own fixture, with the captured status', functio
         'customers' => [HubMock::customers(), 200],
         'suppliers' => [HubMock::suppliers(), 200],
         'bank-statements-empty' => [HubMock::bankStatements(), 200],
+        'create-document' => [HubMock::createDocument(), 201],
+        'sync' => [HubMock::sync(), 200],
         'validate-clean' => [HubMock::validateDocument(), 200],
         'validate-findings' => [HubMock::validateDocument(valid: false), 200],
         'error-unauthenticated' => [HubMock::unauthenticated(), 401],

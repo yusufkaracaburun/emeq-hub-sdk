@@ -53,6 +53,12 @@ if (! is_dir($outDir) && ! mkdir($outDir, 0755, true) && ! is_dir($outDir)) {
  * Minimal document that satisfies StoreDocumentRequest: type, external_id,
  * issue_date, party, lines. `external_id` doubles as the idempotency key.
  *
+ * The party defaults to a made-up company, which is what you want for the
+ * validation captures — it produces the "unknown relation" and "bad VAT number"
+ * findings. A write run needs a party the administration already knows, or the
+ * booking is refused: point EMEQ_CAPTURE_PARTY_* at a relation from
+ * `GET /accounting/customers`.
+ *
  * @return array<string, mixed>
  */
 function sampleDocument(string $externalId, string $issueDate): array
@@ -67,8 +73,9 @@ function sampleDocument(string $externalId, string $issueDate): array
         'issue_date' => $issueDate,
         'party' => [
             'role' => 'debtor',
-            'name' => 'Fixture Capture B.V.',
-            'vat_number' => 'NL000000000B01',
+            'name' => getenv('EMEQ_CAPTURE_PARTY_NAME') ?: 'Fixture Capture B.V.',
+            'vat_number' => getenv('EMEQ_CAPTURE_PARTY_VAT') ?: 'NL000000000B01',
+            'external_id' => getenv('EMEQ_CAPTURE_PARTY_ID') ?: null,
         ],
         'lines' => [
             [
@@ -77,6 +84,7 @@ function sampleDocument(string $externalId, string $issueDate): array
                 'tax_rate' => 21,
                 'quantity' => 1,
                 'unit_price' => 100.0,
+                'category' => 'omzet',
             ],
         ],
     ];

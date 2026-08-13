@@ -243,7 +243,7 @@ files:
 ```php
 use Emeq\HubSdk\Testing\HubMock;
 
-MockClient::global(HubMock::accounting()); // every accounting read at once
+MockClient::global(HubMock::accounting()); // every read plus sync, at once
 
 // Or one endpoint, mixed with your own mocks:
 MockClient::global([
@@ -251,6 +251,9 @@ MockClient::global([
     '*/v1/accounting/documents/validate' => HubMock::validateDocument(valid: false),
     '*/v1/accounting/capabilities' => HubMock::unauthenticated(),
 ]);
+
+// Booking shares its URL with the list read, so key it explicitly:
+MockClient::global(['*/v1/accounting/documents' => HubMock::createDocument()]);
 
 // The raw payload, to assert against or to build a variant from:
 $mapping = HubMock::fixture('mapping')['mapping'];
@@ -268,13 +271,17 @@ What the captures show, and what a hand-written mock tends to get wrong:
   like `reverse_charge:21` next to plain rates.
 - A document read is a thin projection of the provider's record: `issue_date`,
   `party.name` and `lines` can all come back empty.
-
-`createDocument()` and `sync()` have no factory. Both are writes, so an honest
-capture means booking a real document and triggering a provider re-sync; a
-guessed shape with the SDK's stamp on it is worse than your own mock.
+- `createDocument()` answers `201` with the provider's own identifiers —
+  `external_ref` and `external_number`. Store them; they are how the booking is
+  found back in the administration. A retry with the same `Idempotency-Key`
+  returns a byte-identical body, so the document is booked once.
+- `POST` and `GET` on `/accounting/documents` share a URL, and Saloon matches
+  mocks on the URL alone. `HubMock::accounting()` maps it to the list read, so a
+  test that books has to key that pattern itself.
 
 Fixtures are a snapshot, not a contract — they go stale when Hub changes.
-`tools/capture-fixtures.php` in this repository re-captures them.
+`tools/capture-fixtures.php` in this repository re-captures them; its write
+cases sit behind `--allow-write` because they book for real.
 
 ## AI prompt — wire this SDK into your Laravel app
 

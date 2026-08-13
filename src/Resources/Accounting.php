@@ -146,7 +146,7 @@ class Accounting extends Resource
     {
         $response = $this->connector->send(new SyncAccountingRequest(
             accountId: $this->resolveAccountId($accountId),
-            body: $body,
+            payload: $body,
         ));
 
         return $this->json($response->json());

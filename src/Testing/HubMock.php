@@ -18,11 +18,6 @@ use Saloon\Http\Faking\MockResponse;
  * ```php
  * MockClient::global(HubMock::accounting());
  * ```
- *
- * Not covered: `createDocument()` and `sync()`. Both are writes, so capturing a
- * real response means booking a real document and triggering a provider
- * re-sync. Mock those yourself until a capture lands rather than trusting a
- * guess from here.
  */
 final class HubMock
 {
@@ -92,6 +87,29 @@ final class HubMock
     }
 
     /**
+     * A booked document — `201`, not `200`.
+     *
+     * `external_ref` and `external_number` are the provider's own identifiers
+     * for the booking; store them, they are how the document is found back in
+     * the administration. A retry carrying the same `Idempotency-Key` returns a
+     * byte-identical body, verified against a live Hub: the document is booked
+     * once and the replay echoes the first answer.
+     */
+    public static function createDocument(): MockResponse
+    {
+        return MockResponse::make(self::fixture('create-document'), 201);
+    }
+
+    /**
+     * Reports how many records the provider pulled — the shape says nothing
+     * about which entities were touched.
+     */
+    public static function sync(): MockResponse
+    {
+        return MockResponse::make(self::fixture('sync'), 200);
+    }
+
+    /**
      * Validation answers 200 either way; `valid` carries the verdict.
      *
      * The clean payload still holds one `info` finding — findings are not the
@@ -122,11 +140,19 @@ final class HubMock
     }
 
     /**
-     * URL-keyed map for `MockClient::global()`, covering every read.
+     * URL-keyed map for `MockClient::global()`, covering every endpoint whose
+     * URL identifies it on its own.
      *
      * Keys are URL patterns, not `Http\Request\*` classes — that namespace is
-     * package-internal. The validate pattern is listed before the documents one
-     * so the more specific path wins.
+     * package-internal. Saloon walks the map in order and takes the first
+     * pattern that matches, so the validate path is listed before the documents
+     * one.
+     *
+     * `createDocument()` is deliberately absent. Saloon matches on the URL
+     * alone, and booking a document posts to the same `/accounting/documents`
+     * the list read gets — one map cannot answer both. This one answers the
+     * read; a test that books maps that same wildcard pattern to
+     * `HubMock::createDocument()` itself.
      *
      * @return array<string, MockResponse>
      */
@@ -143,6 +169,7 @@ final class HubMock
             '*/v1/accounting/customers*' => self::customers(),
             '*/v1/accounting/suppliers*' => self::suppliers(),
             '*/v1/accounting/bank-statements*' => self::bankStatements(),
+            '*/v1/accounting/sync' => self::sync(),
         ];
     }
 

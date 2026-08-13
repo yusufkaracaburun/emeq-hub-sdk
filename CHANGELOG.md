@@ -7,14 +7,23 @@ call was right about the blocker — the SDK had no fixtures, only invented
 payloads inline in its own tests — and wrong to leave it there. The blocker was
 removable: capture the responses.
 
+### Fixed
+
+- **`Hub::accounting()->sync()` was dead on arrival.** `SyncAccountingRequest`
+  promoted a readonly `$body`, which collides with the non-readonly `$body` that
+  `HasJsonBody` declares — PHP fatals at class-load, so every call to `sync()`
+  crashed the request. Exactly the trap `GetAccountingRequest` documents for
+  `$query`, one class over, uncaught because nothing exercised `sync()`. The
+  property is `$payload` now, and the mock factory below covers the call.
+
 ### Added
 
 - **`Emeq\HubSdk\Testing\HubMock`** — canonical `MockResponse` factories for the
-  accounting reads, the validation endpoint and the error envelopes, plus
-  `HubMock::accounting()` for wiring the lot into `MockClient::global()` in one
-  line, and `HubMock::fixture()` for the raw payload. New public namespace,
-  hence the minor bump.
-- **`src/Testing/fixtures/*.json`** — 15 responses captured from a live Hub
+  accounting reads, `createDocument()`, `sync()`, the validation endpoint and
+  the error envelopes, plus `HubMock::accounting()` for wiring the lot into
+  `MockClient::global()` in one line, and `HubMock::fixture()` for the raw
+  payload. New public namespace, hence the minor bump.
+- **`src/Testing/fixtures/*.json`** — 17 responses captured from a live Hub
   against a connected provider, then redacted. Same files feed the SDK's own
   tests, so a consumer testing against `HubMock` tests against the shape this
   package treats as the truth.
@@ -39,12 +48,19 @@ removable: capture the responses.
   without one with `400 invalid_query` / `VALIDATION_ERROR`, which the SDK raises
   as `ValidationException`.
 
+- **The write path is captured too.** `createDocument()` answers `201` with the
+  provider's own `external_ref` and `external_number` — neither is in the
+  OpenAPI response schema, which says `{"type": "string"}` for this endpoint.
+  Replaying the same `Idempotency-Key` returned a byte-identical body against a
+  live Hub, so the idempotency contract the README states is now measured rather
+  than asserted.
+- **`POST` and `GET` on `/accounting/documents` share a URL**, and Saloon matches
+  mocks on the URL alone, so one map cannot answer both. `accounting()` answers
+  the read and a booking test keys the pattern itself. A test pins that
+  behaviour, so the documentation of the trap cannot quietly stop being true.
+
 ### Not done, on purpose
 
-- **No factories for `createDocument()` and `sync()`.** Both are writes: an
-  honest capture books a real document and triggers a provider re-sync. A
-  guessed shape carrying this package's authority is worse than a consumer's own
-  mock, so they are documented as absent instead.
 - **Still no typed value objects for the canonical document.** 0.10.1 declined a
   hand-written mirror of the TypeScript definition in `emeq-app`; capturing real
   responses turned that from a judgement call into a measurement. That mirror is
