@@ -74,6 +74,10 @@ class HubServiceProvider extends PackageServiceProvider
 
         $middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
         HubRouteMiddleware::assertNotEmpty($middleware);
+        HubRouteMiddleware::assertAuthenticated(
+            $middleware,
+            (bool) config('hub.routes.allow_unauthenticated', false),
+        );
 
         $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
     }

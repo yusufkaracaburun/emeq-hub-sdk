@@ -7,13 +7,7 @@ namespace Emeq\HubSdk\Webhooks;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
-use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Exception;
-use Illuminate\Contracts\Cache\Lock;
-use Illuminate\Contracts\Cache\LockProvider;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
@@ -26,17 +20,12 @@ use Throwable;
  * Single-DB apps can use this class as-is (or extend only hooks).
  * Multi-DB apps override bind/release/resolveWebhookCall and usually
  * {@see SerializesHubWebhookByIds}.
+ *
+ * Dedupe and locking live in {@see HubWebhookDeduplicator}; override
+ * {@see deduplicator()} to supply a subclass of it.
  */
 class ProcessHubWebhookJob extends ProcessWebhookJob
 {
-    /**
-     * X-Emeq-Event-Id values Hub reuses across unrelated events, so they
-     * identify nothing. See {@see deduplicableEventId()}.
-     *
-     * @var list<string>
-     */
-    protected const OPAQUE_EVENT_IDS = ['no-id'];
-
     /**
      * Explicit retry policy: without one the package inherits whatever the
      * host's queue worker was started with, which is not a contract.
@@ -91,7 +80,8 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             $headers = is_array($call->headers) ? $call->headers : [];
             $eventId = HubWebhookHeaders::eventId($headers);
             $requestId = HubWebhookHeaders::requestId($headers);
-            $dedupeId = $this->deduplicableEventId($eventId);
+            $dedupe = $this->deduplicator();
+            $dedupeId = $dedupe->identityFor($eventId);
 
             // Still passes the raw event id on for correlation — it is only
             // useless as an identity, not as a log line.
@@ -104,7 +94,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             // Dedupe is check-then-act, so two workers holding concurrent
             // redeliveries of one event would both pass it. The lock makes the
             // pair sequential; the loser then sees the winner's row.
-            $lock = $this->deduplicationLock($dedupeId);
+            $lock = $dedupe->lock($dedupeId);
 
             if (! $lock->get()) {
                 Log::info('hub.webhook.deduplicated', [
@@ -118,7 +108,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             }
 
             try {
-                if ($this->alreadyProcessed($dedupeId, self::keyOf($call))) {
+                if ($dedupe->alreadyProcessed($dedupeId, self::keyOf($call))) {
                     Log::info('hub.webhook.deduplicated', [
                         'event_id' => $eventId,
                         'account_id' => $accountId,
@@ -160,30 +150,9 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         $this->processEnvelope($envelope, $eventId, $requestId);
     }
 
-    /**
-     * The configured store must support atomic locks. Refusing here rather than
-     * degrading to an unguarded check keeps the failure visible: the job lands
-     * in failed_jobs with the reason instead of silently racing.
-     *
-     * @throws MissingConfigurationException when the store cannot lock
-     */
-    protected function deduplicationLock(string $eventId): Lock
+    protected function deduplicator(): HubWebhookDeduplicator
     {
-        // Config::string() would throw on the null this key legitimately holds.
-        $configured = Config::get('hub.webhook.lock_store');
-        $name = is_string($configured) && $configured !== '' ? $configured : null;
-
-        $store = Cache::store($name)->getStore();
-
-        if (! $store instanceof LockProvider) {
-            $default = Config::get('cache.default');
-
-            throw MissingConfigurationException::webhookLockStoreNotLockable(
-                $name ?? (is_string($default) ? $default : 'default'),
-            );
-        }
-
-        return $store->lock($this->deduplicationLockKey($eventId), 30);
+        return new HubWebhookDeduplicator($this->webhookConfigName(), $this->accountId);
     }
 
     private static function keyOf(WebhookCall $call): int
@@ -194,50 +163,37 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
     }
 
     /**
-     * The event id to deduplicate on, or null when the header carries no usable
-     * identity.
-     *
-     * Hub mints an id per delivery, but only when the partner supplies one:
-     * Snelstart's controller falls back to the literal string `no-id`, so many
-     * unrelated events arrive sharing it. Treating that as an identity makes the
-     * first one swallow all the rest. Such values are handled exactly like a
-     * missing header: processed, never deduplicated. Subclasses recognise
-     * further sentinels by overriding {@see OPAQUE_EVENT_IDS}.
-     */
-    protected function deduplicableEventId(?string $eventId): ?string
-    {
-        if ($eventId === null) {
-            return null;
-        }
-
-        return in_array($eventId, static::OPAQUE_EVENT_IDS, true) ? null : $eventId;
-    }
-
-    /**
-     * Scoped per webhook config so two Hub configs cannot block each other, and
-     * per account so the lock is no wider than the guard it protects: two
-     * accounts delivered one event id must not skip each other as duplicates.
-     */
-    protected function deduplicationLockKey(string $eventId): string
-    {
-        return 'hub-webhook:'.$this->webhookConfigName().':'.$this->accountId.':'.$eventId;
-    }
-
-    /**
      * Records the failure on the webhook_calls row.
      *
      * Spatie only writes `exception` from the synchronous request path, so
      * without this a crashed job leaves the column null — and alreadyProcessed()
      * would then read that row as "handled" and drop Hub's redelivery.
+     *
+     * Both ways that can fail here reproduce exactly that outcome, so neither
+     * returns quietly: an unrecorded failure is louder than the failure itself.
      */
     public function failed(?Throwable $exception): void
     {
-        if ($exception === null || ! $this->bindAccountContext($this->accountId)) {
+        if ($exception === null) {
+            return;
+        }
+
+        if (! $this->bindAccountContext($this->accountId)) {
+            $this->logUnrecordedFailure('unknown_account_in_failed', $exception);
+
             return;
         }
 
         try {
-            $this->resolveWebhookCall()?->saveException(
+            $call = $this->resolveWebhookCall();
+
+            if ($call === null) {
+                $this->logUnrecordedFailure('webhook_call_missing_in_failed', $exception);
+
+                return;
+            }
+
+            $call->saveException(
                 $exception instanceof Exception
                     ? $exception
                     : new RuntimeException($exception->getMessage(), (int) $exception->getCode(), $exception),
@@ -245,6 +201,20 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         } finally {
             $this->releaseAccountContext();
         }
+    }
+
+    /**
+     * The row keeps `exception` null, so the dedupe guard will read this failed
+     * delivery as one that ran to completion and drop Hub's redelivery.
+     */
+    private function logUnrecordedFailure(string $reason, Throwable $exception): void
+    {
+        Log::error('hub.webhook.failure_unrecorded', [
+            'reason' => $reason,
+            'account_id' => $this->accountId,
+            'webhook_call_id' => $this->webhookCallId,
+            'exception' => $exception->getMessage(),
+        ]);
     }
 
     /**
@@ -323,44 +293,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ]);
 
         event(new HubWebhookIgnored($envelope, $eventId, $requestId));
-    }
-
-    /**
-     * An earlier call with this event id that did not record an exception —
-     * i.e. one that ran to completion.
-     */
-    protected function alreadyProcessed(string $eventId, int $currentId): bool
-    {
-        $query = WebhookCall::query()
-            ->where('name', $this->webhookConfigName())
-            ->where('id', '<', $currentId)
-            ->whereNull('exception');
-
-        $this->whereAccountId($query);
-        HubWebhookHeaders::whereEventId($query, $eventId);
-
-        return $query->exists();
-    }
-
-    /**
-     * Multi-DB consumers already read a per-tenant table, but the single-DB
-     * default shares one — so without this the event id alone decides, and one
-     * account's delivery deduplicates another's.
-     *
-     * @param  Builder<WebhookCall>  $query
-     */
-    private function whereAccountId(Builder $query): void
-    {
-        $accountId = $this->accountId;
-
-        $query->where(function (Builder $query) use ($accountId): void {
-            $query->where('payload->account_id', $accountId);
-
-            // SQLite compares a JSON number against a bound string as unequal.
-            if (ctype_digit($accountId)) {
-                $query->orWhere('payload->account_id', (int) $accountId);
-            }
-        });
     }
 
     protected function webhookConfigName(): string

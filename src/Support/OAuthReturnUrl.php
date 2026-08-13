@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Support;
 
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
-use Illuminate\Http\Request;
 
 /**
  * Builds Hub OAuth return_url from a consumer-configured relative path.
@@ -16,7 +15,10 @@ use Illuminate\Http\Request;
  */
 final class OAuthReturnUrl
 {
-    public static function fromConfigPath(Request $request, string $returnPath): ?string
+    /**
+     * @param  string  $origin  scheme + host of the consumer app, e.g. `Request::getSchemeAndHttpHost()`
+     */
+    public static function fromConfigPath(string $origin, string $returnPath): ?string
     {
         $returnPath = trim($returnPath);
 
@@ -37,6 +39,6 @@ final class OAuthReturnUrl
             $returnPath = '/'.$returnPath;
         }
 
-        return $request->getSchemeAndHttpHost().$returnPath;
+        return $origin.$returnPath;
     }
 }

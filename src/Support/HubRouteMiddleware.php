@@ -38,9 +38,45 @@ final class HubRouteMiddleware
     {
         if ($middleware === []) {
             throw new InvalidArgumentException(
-                'hub.routes.middleware must not be empty when hub.routes.enabled is true. '
-                .'Refusing to register unauthenticated Hub BFF routes.',
+                'hub.routes.middleware must not be empty when hub.routes.enabled is true.',
             );
         }
+    }
+
+    /**
+     * The BFF mints Hub connect-session URLs for whatever ResolvesAccountId
+     * returns, so an unauthenticated POST hands a partner OAuth handoff to
+     * anyone. Middleware named outside the `auth` family (`tenant.auth`,
+     * a Sanctum wrapper) is invisible here — set
+     * `hub.routes.allow_unauthenticated` to declare it deliberate.
+     *
+     * @param  list<string>  $middleware
+     */
+    public static function assertAuthenticated(array $middleware, bool $allowUnauthenticated = false): void
+    {
+        if ($allowUnauthenticated) {
+            return;
+        }
+
+        foreach ($middleware as $entry) {
+            if (self::looksLikeAuth($entry)) {
+                return;
+            }
+        }
+
+        throw new InvalidArgumentException(
+            'hub.routes.middleware carries no auth middleware ("auth", "auth:sanctum", …). '
+            .'Refusing to register unauthenticated Hub BFF routes. '
+            .'Set hub.routes.allow_unauthenticated to true if your auth middleware is named differently.',
+        );
+    }
+
+    private static function looksLikeAuth(string $middleware): bool
+    {
+        $name = strtolower($middleware);
+
+        return $name === 'auth'
+            || str_starts_with($name, 'auth:')
+            || str_starts_with($name, 'auth.');
     }
 }

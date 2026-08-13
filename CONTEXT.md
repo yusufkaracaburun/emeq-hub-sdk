@@ -39,8 +39,9 @@ Rules:
 
 - `Resources/` and `Webhooks/` may use `Support/`, `Exceptions/`, `Contracts/`
   and `Http/`. Nothing depends on `Http/Controllers/`.
-- `Support/` stays framework-light. `OAuthReturnUrl` is the one exception; it
-  needs the request host.
+- `Support/` stays framework-light — no `Illuminate\Http` imports. Helpers that
+  need request data take it as a scalar (`OAuthReturnUrl::fromConfigPath()`
+  takes an origin string, not a `Request`).
 - Everything a consumer is meant to touch lives in `Facades\Hub`, `Contracts\*`,
   `Resources\*`, `Webhooks\*`, `Events\*`. `Http\*` is internal.
 - Every failure a consumer can hit is a `HubException` — including configuration
@@ -53,6 +54,18 @@ Rules:
   `if ($provider === 'exact')`, no per-partner classes, no allowlist.
 - **Account context is server-side.** Derived from `ResolvesAccountId` or passed
   explicitly by the consumer's own code. Never read from the request.
+
+- **`Resources\Connections` is the one PAT-scoped surface.** Hub resolves
+  `/v1/connections/{id}` against the Consumer behind the token and reads no
+  account context (`ConnectionController::findOwnedConnection()` filters on
+  `consumer_id` alone), so the SDK sends none. Every other account-bearing call
+  carries one. Multi-tenant consumers verify ownership before calling it; the
+  SDK cannot do it for them.
+
+- **The BFF refuses to boot without auth.** `hub.routes.middleware` must carry an
+  `auth`-family entry unless `hub.routes.allow_unauthenticated` says otherwise.
+  The endpoint mints partner-OAuth handoff URLs, so unauthenticated is a
+  decision, never a default.
 - **Publish-only migrations.** The package ships a `webhook_calls` migration stub
   but never runs it; multi-DB consumers decide which connection it lands on.
 - **The public API is a contract.** Changes to `Resources\*`, `Contracts\*`,

@@ -57,7 +57,10 @@ EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
    `config/hub.php` and use `SerializesHubWebhookByIds` on that job.
 
 The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
-(default `false`). Middleware must be non-empty — empty middleware refuses to boot.
+(default `false`). Middleware must be non-empty **and carry an `auth`-family
+entry** (`auth`, `auth:sanctum`, `auth.basic`, …) — otherwise boot fails. If your
+auth middleware is named something else (`tenant.auth`), set
+`hub.routes.allow_unauthenticated` to `true` to declare that deliberate.
 
 | Method | Path | Action |
 |---|---|---|
@@ -158,8 +161,13 @@ exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicat
 
 Some event ids identify nothing: Hub sends the literal `no-id` when the partner
 omitted an id of its own, so unrelated events share it. Those are processed like
-a webhook with no event id at all — never deduplicated. Override
-`ProcessHubWebhookJob::OPAQUE_EVENT_IDS` in a subclass to recognise more.
+a webhook with no event id at all — never deduplicated. To recognise more,
+subclass `HubWebhookDeduplicator` (overriding its `OPAQUE_EVENT_IDS`) and return
+it from `ProcessHubWebhookJob::deduplicator()`.
+
+The published `webhook_calls` migration carries a `['name', 'id']` index the
+dedupe query needs. If you migrated before 0.9.0, add it yourself — see the
+changelog.
 
 ## Usage
 
@@ -247,6 +255,7 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 
 - **PAT in the browser** — always call Hub from your Laravel backend via this SDK.
 - **Account id from the client** — never trust `X-Account-Id` / `account_external_id` from the request; derive via `ResolvesAccountId`.
+- **`Hub::connections()` is PAT-scoped, not account-scoped** — Hub resolves `/v1/connections/{id}` against the Consumer behind your token and ignores account context, so `get()` / `delete()` reach every connection of every account you own. Verify ownership yourself; never forward a connection id straight from a request.
 - **Hardcoded providers** — render what `integrations()->list()` returns; no `if ($provider === 'exact')`.
 - **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).

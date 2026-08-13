@@ -73,6 +73,10 @@ return [
     | EMEQ_HUB_ROUTES_MIDDLEWARE is comma-separated and therefore cannot express
     | `throttle:60,1` — use a named limiter (`throttle:hub`) when overriding.
     |
+    | Boot refuses a middleware stack with no `auth`-family entry. If your auth
+    | middleware is named something else (`tenant.auth`), set
+    | `allow_unauthenticated` to true to declare that deliberate.
+    |
     */
     'routes' => [
         'enabled' => (bool) env('EMEQ_HUB_ROUTES', false),
@@ -81,6 +85,7 @@ return [
             'trim',
             explode(',', (string) env('EMEQ_HUB_ROUTES_MIDDLEWARE', '')),
         ))) ?: ['api', 'auth:sanctum', 'throttle:60,1'],
+        'allow_unauthenticated' => (bool) env('EMEQ_HUB_ROUTES_ALLOW_UNAUTHENTICATED', false),
     ],
 
     /*

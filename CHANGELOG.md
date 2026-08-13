@@ -1,5 +1,85 @@
 # Changelog
 
+## [0.9.0] — 2026-08-12
+
+Follow-up to the 2026-08-12 Laravel-extension audit. Five 🟠 and two 🟡, three of
+them semver-breaking.
+
+### Security
+
+- **The BFF now refuses to boot without auth middleware.**
+  `HubRouteMiddleware::assertNotEmpty()` claimed in its message that it was
+  "refusing to register unauthenticated Hub BFF routes", but it only checked
+  that the list was non-empty — `['api']` passed and registered an
+  unauthenticated `POST …/integrations/connect-session`, which mints a Hub
+  partner-OAuth handoff URL for whatever `ResolvesAccountId` returns. A new
+  `assertAuthenticated()` requires an `auth`-family entry (`auth`, `auth:*`,
+  `auth.*`).
+
+  **Upgrading:** if your auth middleware is named outside that family
+  (`tenant.auth`, a Sanctum wrapper), set `hub.routes.allow_unauthenticated` to
+  `true` — or add `EMEQ_HUB_ROUTES_ALLOW_UNAUTHENTICATED=true`. Boot throws
+  otherwise.
+
+- **`Hub::connections()` is documented as PAT-scoped.** Hub resolves
+  `/v1/connections/{id}` against the Consumer behind the token and reads no
+  account context, so `get()` / `delete()` reach every connection of every
+  account under that token. The SDK cannot narrow this — sending `X-Account-Id`
+  would be ignored server-side and buy false confidence — so it is now stated in
+  `Connections`, `CONTEXT.md` and the README pitfalls instead. Multi-tenant
+  consumers must verify ownership before calling either method.
+
+### Changed
+
+- **Webhook dedupe moved to `HubWebhookDeduplicator`.** `ProcessHubWebhookJob`
+  had grown to 370 LOC while also being the class consumers subclass, so every
+  dedupe internal was a semver contract. The job keeps bind → resolve →
+  dispatch; identity, locking and the `alreadyProcessed()` query move to a
+  collaborator.
+
+  **Upgrading:** `OPAQUE_EVENT_IDS`, `deduplicableEventId()`,
+  `deduplicationLock()`, `deduplicationLockKey()` and `alreadyProcessed()` are
+  gone from the job. Subclass `HubWebhookDeduplicator` and override the job's
+  single `deduplicator()` hook instead. Lock keys and behaviour are unchanged.
+
+- **`OAuthReturnUrl::fromConfigPath()` takes an origin string, not a `Request`.**
+  It only ever needed `getSchemeAndHttpHost()`; taking it as a scalar keeps
+  `Support/` free of `Illuminate\Http` and makes the class unit-testable.
+  `IntegrationController` passes `$request->getSchemeAndHttpHost()`.
+
+### Fixed
+
+- **A failure the `failed()` hook could not record was swallowed.** Both early
+  exits — `bindAccountContext()` returning false, and `resolveWebhookCall()`
+  returning null — left `webhook_calls.exception` null, which is exactly the
+  state `alreadyProcessed()` reads as "ran to completion", so Hub's redelivery
+  was dropped. The 0.7.0 fix for that bug reproduced it in its own error paths.
+  Both now log `hub.webhook.failure_unrecorded` at `error` level.
+
+- **`routes/hub.php` carried a second, stale copy of the middleware default.**
+  Its `config('hub.routes.middleware', ['api', 'auth:sanctum'])` fallback dropped
+  the `throttle:60,1` that `config/hub.php` ships — and was unreachable anyway,
+  since `packageBooted()` validates the same key before loading the file. The
+  route file now reads the validated value and states where it is validated.
+
+- **The published `webhook_calls` migration ships an index.**
+  `alreadyProcessed()` filters `name` + `id` on every delivery, while holding the
+  dedupe lock, on a table that only grows; the stub had no index at all.
+
+  **Upgrading:** existing consumers already ran the old migration. Add the index
+  yourself:
+
+  ```php
+  Schema::table('webhook_calls', function (Blueprint $table): void {
+      $table->index(['name', 'id']);
+  });
+  ```
+
+### Added
+
+- `hub.routes.allow_unauthenticated` (env `EMEQ_HUB_ROUTES_ALLOW_UNAUTHENTICATED`,
+  default `false`).
+
 ## [0.8.0] — 2026-08-12
 
 Surface reduction ahead of 1.0. The package carried extension points that no

@@ -19,6 +19,11 @@ return new class extends Migration
             $table->text('exception')->nullable();
 
             $table->timestamps();
+
+            // HubWebhookDeduplicator::alreadyProcessed() filters name + id on
+            // every delivery, while holding the dedupe lock, on a table that
+            // only grows. Without this it is a full scan per webhook.
+            $table->index(['name', 'id']);
         });
     }
 

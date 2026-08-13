@@ -6,6 +6,7 @@ use Emeq\HubSdk\Contracts\ResolvesWebhookAccount;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
+use Emeq\HubSdk\Webhooks\HubWebhookDeduplicator;
 use Emeq\HubSdk\Webhooks\HubWebhookEnvelope;
 use Emeq\HubSdk\Webhooks\HubWebhookEvent;
 use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
@@ -16,6 +17,7 @@ use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Spatie\WebhookClient\Models\WebhookCall;
 use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
@@ -240,6 +242,49 @@ test('a failed job records its exception so the redelivery is not deduplicated',
     Event::assertDispatched(HubWebhookReceived::class);
 });
 
+test('a failure it cannot record is logged as an error, not swallowed', function () {
+    // Both early exits in failed() leave `exception` null, which is exactly the
+    // state alreadyProcessed() reads as "ran to completion" — so the redelivery
+    // is dropped. Silence there hides the same bug the failed() hook exists for.
+    Log::spy();
+
+    $call = makeWebhookCall();
+
+    (new class($call) extends ProcessHubWebhookJob
+    {
+        protected function bindAccountContext(string $accountId): bool
+        {
+            return false;
+        }
+    })->failed(new RuntimeException('boom'));
+
+    expect($call->fresh()->exception)->toBeNull();
+
+    Log::shouldHaveReceived('error')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'hub.webhook.failure_unrecorded'
+            && $context['reason'] === 'unknown_account_in_failed')
+        ->once();
+});
+
+test('a failure with no resolvable webhook_calls row is logged as an error', function () {
+    Log::spy();
+
+    $call = makeWebhookCall();
+
+    (new class($call) extends ProcessHubWebhookJob
+    {
+        protected function resolveWebhookCall(): ?WebhookCall
+        {
+            return null;
+        }
+    })->failed(new RuntimeException('boom'));
+
+    Log::shouldHaveReceived('error')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'hub.webhook.failure_unrecorded'
+            && $context['reason'] === 'webhook_call_missing_in_failed')
+        ->once();
+});
+
 test('an opaque event id identifies nothing and is never deduplicated', function () {
     // Hub sends the literal 'no-id' when the partner omitted an id of its own
     // (Snelstart), so unrelated events share it. Deduplicating on that value
@@ -292,9 +337,17 @@ test('a subclass can widen the opaque list', function () {
     (new ProcessHubWebhookJob($second))->handle();
     Event::assertNotDispatched(HubWebhookReceived::class);
 
+    // The sentinel list moved onto the deduplicator, so widening it now means
+    // subclassing that and pointing the job's one dedupe hook at it.
     (new class($second) extends ProcessHubWebhookJob
     {
-        protected const OPAQUE_EVENT_IDS = ['no-id', 'placeholder'];
+        protected function deduplicator(): HubWebhookDeduplicator
+        {
+            return new class($this->webhookConfigName(), $this->accountId) extends HubWebhookDeduplicator
+            {
+                protected const OPAQUE_EVENT_IDS = ['no-id', 'placeholder'];
+            };
+        }
     })->handle();
 
     Event::assertDispatched(HubWebhookReceived::class);

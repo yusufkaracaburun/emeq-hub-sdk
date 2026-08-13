@@ -19,9 +19,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Validated in HubServiceProvider::packageBooted() — non-empty and carrying an
+// auth entry — before this file is loaded. The shipped default lives in
+// config/hub.php; do not restate it here.
 $prefix = trim((string) config('hub.routes.prefix', 'api'), '/');
-$middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware', ['api', 'auth:sanctum']));
-HubRouteMiddleware::assertNotEmpty($middleware);
+$middleware = HubRouteMiddleware::normalize(config('hub.routes.middleware'));
 
 Route::middleware($middleware)
     ->prefix($prefix)

@@ -50,13 +50,18 @@ class IntegrationController extends Controller
 
     /**
      * Mint Hub's hosted connect handoff page URL.
+     *
+     * Deliberately reads no input from the request body or query: the account
+     * comes from ResolvesAccountId and the return path from config. The request
+     * is here for the app's own scheme + host, nothing else — which is why
+     * there is no FormRequest.
      */
     public function connectSession(Request $request): JsonResponse
     {
         try {
             $externalId = $this->accountId();
             $returnUrl = OAuthReturnUrl::fromConfigPath(
-                $request,
+                $request->getSchemeAndHttpHost(),
                 $this->returnPath(),
             );
             $session = $this->hub->connectSessions()->create(
