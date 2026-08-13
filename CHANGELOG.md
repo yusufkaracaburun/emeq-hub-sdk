@@ -1,12 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] — 2026-08-13
 
 ### Documentation
 
+- **The Hub OpenAPI spec is now a committed artefact.** `/docs/api` was already
+  live, but the exported `api.json` was gitignored and stale. Hub now commits it
+  and fails CI on drift, so contract changes are visible as a diff. Noted in the
+  further-reading block, with the caveat that request bodies are reliable and
+  response schemas are still thin for provider pass-through endpoints.
+
 - **README required `^0.7`.** On a 0.x that caret pins the minor, so consumers
   following the install block got 0.7.x — without the 0.9.0 route-auth guard.
-  Both occurrences now require `^0.9`.
+  Both occurrences now require `^0.10`, and the `dev-master` branch alias moved
+  to `0.10.x-dev`.
 - **The `['name', 'id']` index claim is now conditional.** 0.9.0 documented it as
   one "the dedupe query needs". Measured on MySQL 5.7 / InnoDB with the real
   query: on a Hub-only `webhook_calls` the optimizer never picks it (`key=PRIMARY`

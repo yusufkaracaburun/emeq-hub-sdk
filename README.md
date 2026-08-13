@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.9
+composer require emeq/hub-sdk:^0.10
 ```
 
 ```bash
@@ -222,7 +222,11 @@ installs and configures the SDK against your tenant model:
 
 - [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub admin + consumer invariants (B1–B4)
 - [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent prompts
-- Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api`
+- Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api` — same spec committed as
+  [`api.json`](https://github.com/yusufkaracaburun/emeq-hub/blob/master/api.json),
+  so contract changes are visible as a diff. Request bodies are derived from Hub
+  form requests and are reliable; response schemas are still thin for endpoints
+  that proxy a provider body.
 
 Contributing to this package: [`CONTEXT.md`](CONTEXT.md) for the domain language
 and structural rules, [`docs/adr/`](docs/adr/) for the decisions behind them.
