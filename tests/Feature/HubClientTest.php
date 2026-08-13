@@ -15,6 +15,12 @@ use Emeq\HubSdk\Hub;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 
+// MockClient::global() is `??=`: a leaked instance silently ignores the next
+// test's mock data. Same reason consumers must destroy it in their own suites.
+afterEach(function (): void {
+    MockClient::destroyGlobal();
+});
+
 it('lists integrations without hardcoding providers', function (): void {
     $mock = new MockClient([
         ListIntegrationsRequest::class => MockResponse::make([
@@ -189,6 +195,29 @@ it('lists the integrations catalog without an account id', function (): void {
     $mock->assertSent(function (ListIntegrationsRequest $request): bool {
         return $request->query()->all() === [];
     });
+});
+
+it('is mockable from a consumer app through a global mock client on url patterns', function (): void {
+    // The path README documents for consumers: no saloonphp/laravel-plugin, so
+    // no Saloon::fake(); and no imports from the package-internal Http\Request
+    // namespace, so the mock is keyed on the URL.
+    $mock = MockClient::global([
+        '*/v1/accounting/documents' => MockResponse::make(['id' => 'doc_1'], 201),
+    ]);
+
+    $document = ['type' => 'sales_invoice', 'external_id' => 'invoice-42'];
+
+    $created = app(Hub::class)->accounting()->createDocument(
+        $document,
+        idempotencyKey: $document['external_id'],
+        accountId: 'tenant-1',
+    );
+
+    expect($created)->toBe(['id' => 'doc_1']);
+
+    // external_id is the documented source of the key: same document, same key.
+    expect($mock->getLastPendingRequest()?->headers()->get('Idempotency-Key'))
+        ->toBe('invoice-42');
 });
 
 it('maps unknown provider as not found when hub returns 404', function (): void {

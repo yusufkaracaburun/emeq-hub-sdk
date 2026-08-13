@@ -74,6 +74,10 @@ DONE WHEN
 - composer show emeq/hub-sdk works
 - ResolvesAccountId is bound
 - Package routes respond under my auth middleware
-- Feature/smoke test: connect-session (MockClient) proves account id is derived
-  server-side; optional list test ignores a spoofed request header
+- Feature/smoke test: connect-session proves account id is derived server-side;
+  optional list test ignores a spoofed request header. Mock with
+  `MockClient::global([...])` keyed on URL patterns and destroy it in afterEach —
+  `Saloon::fake()` does not exist (no saloonphp/laravel-plugin)
+- Any createDocument call passes a key derived from the document's external_id,
+  not a fresh uuid
 ```

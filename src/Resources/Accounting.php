@@ -16,6 +16,14 @@ use Emeq\HubSdk\Http\Request\Accounting\ValidateDocumentRequest;
 class Accounting extends Resource
 {
     /**
+     * Book a canonical document. Sent as `Idempotency-Key`.
+     *
+     * $idempotencyKey must be stable per logical write: the same document
+     * retried after a timeout has to present the same key, or Hub books it a
+     * second time. The document's `external_id` is the canonical document key
+     * and the intended source — never a fresh uuid per call, which is exactly
+     * the case the header exists for.
+     *
      * @param  array<string, mixed>  $document
      * @return array<string, mixed>
      */

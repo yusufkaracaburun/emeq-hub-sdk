@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.10.1] — 2026-08-13
+
+Docs only — no API change. Both findings come from the first consumer building
+against `Hub::accounting()`.
+
+### Documentation
+
+- **The idempotency example cancelled idempotency out.** The README showed
+  `createDocument($payload, idempotencyKey: (string) Str::uuid())`. A fresh uuid
+  per call means the retry after a timeout arrives with a new key, and Hub books
+  the same document twice — the exact case the header exists for. The example now
+  derives the key from `$payload['external_id']`, which the canonical contract
+  names as the stable document key; the rule is stated in the pitfall list and in
+  the `createDocument()` docblock, which said nothing about it.
+- **How consumers mock the SDK.** 0.9.0 dropped `saloonphp/laravel-plugin`, so
+  `Saloon::fake()` is gone and nothing documented what replaced it. New *Testing
+  your integration* section: `MockClient::global([...])` keyed on URL patterns —
+  `HubConnector` is a singleton `Saloon\Http\Connector`, so a global mock
+  intercepts every call, and URL keys keep consumers out of the package-internal
+  `Http\Request\*` namespace. Also warns that `global()` is `??=`, so a client
+  left standing silently ignores the next test's mock data, and that the SDK
+  ships no fixtures — shape mocks off the committed OpenAPI spec.
+
+  Covered by a test that fails when the mocked URL stops matching, so the
+  documented path cannot rot silently.
+
+### Not done, on purpose
+
+- **No typed value objects for the canonical document.** `createDocument()` /
+  `validateDocument()` still take `array<string, mixed>`. A hand-written PHP
+  mirror of the TypeScript definition in `emeq-app` would make a third copy of a
+  contract that now has a committed owner (`api.json` in emeq-hub, CI-gated on
+  drift), and that spec's request bodies are the reliable half — so generating
+  DTOs later is cheap and mirroring by hand now is throwaway work.
+- **No `Emeq\HubSdk\Testing` mock factories.** The proposal was to feed them from
+  the fixtures the SDK's own tests use; those do not exist — the tests inline
+  invented payloads. Canonical factories over invented shapes would only give
+  consumers SDK fiction with a stamp of authority, and the spec cannot fix it
+  (response schemas stay thin for provider pass-through). Blocked on capturing
+  real Hub responses first.
+
 ## [0.10.0] — 2026-08-13
 
 ### Documentation

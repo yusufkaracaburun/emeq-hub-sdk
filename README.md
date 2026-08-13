@@ -123,9 +123,11 @@ Hub::accounts()->create('tenant-1', 'Acme B.V.'); // treat 409 as "already exist
 Hub::connections()->delete($connectionId);
 
 // Canonical accounting — Hub picks the partner adapter.
-// Idempotency-Key is required on create (passed as $idempotencyKey).
+// Idempotency-Key is required on create (passed as $idempotencyKey). Derive it
+// from the document's external_id so a retry presents the same key; a fresh
+// uuid per call books the document twice.
 Hub::accounting()->validateDocument($payload);
-Hub::accounting()->createDocument($payload, idempotencyKey: (string) Str::uuid());
+Hub::accounting()->createDocument($payload, idempotencyKey: $payload['external_id']);
 Hub::accounting()->capabilities();
 
 // Collection reads are cursor-paginated and return an AccountingPage.
@@ -202,7 +204,36 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 - **Hardcoded providers** — render what `integrations()->list()` returns; no `if ($provider === 'exact')`.
 - **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).
-- **Idempotency** — `createDocument` requires a stable `idempotencyKey` per logical write.
+- **Idempotency** — `createDocument` requires a key that survives a retry. Stable means *same document, same key*, not one key per process: `external_id` is the canonical document key and the intended source. A fresh `Str::uuid()` per call cancels the header out — the retry after a timeout gets a new key and books the same document a second time.
+
+## Testing your integration
+
+`HubConnector` is a container singleton and a plain `Saloon\Http\Connector`, so
+Saloon's global mock client intercepts every SDK call:
+
+```php
+use Saloon\Http\Faking\MockClient;
+use Saloon\Http\Faking\MockResponse;
+
+beforeEach(function (): void {
+    MockClient::global([
+        '*/v1/integrations' => MockResponse::make([['key' => 'exact']], 200),
+        '*/v1/accounting/documents' => MockResponse::make(['id' => 'doc_1'], 201),
+    ]);
+});
+
+// global() is `??=` — a leaked client silently ignores the next test's mock data.
+afterEach(fn () => MockClient::destroyGlobal());
+```
+
+- `Saloon::fake()` does **not** exist here — this package requires
+  `saloonphp/saloon` only, not `saloonphp/laravel-plugin`.
+- Key mocks on the URL, not on `Http\Request\*` classes: that namespace is
+  package-internal.
+- The SDK ships no fixtures. Shape mocks off the Hub OpenAPI spec
+  ([Further reading](#further-reading)) rather than guesswork — request bodies
+  there are reliable, response schemas are still thin for endpoints that proxy a
+  provider body.
 
 ## AI prompt — wire this SDK into your Laravel app
 
