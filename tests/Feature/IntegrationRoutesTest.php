@@ -80,6 +80,20 @@ describe('with account resolver', function (): void {
         });
     });
 
+    it('connect-session narrows non-string Hub fields to null instead of leaking them', function (): void {
+        $mock = new MockClient([
+            CreateConnectSessionRequest::class => MockResponse::make([
+                'url' => ['not', 'a', 'string'],
+                'expires_at' => 1234567890,
+            ], 200),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->postJson('/api/integrations/connect-session')
+            ->assertOk()
+            ->assertExactJson(['url' => null, 'expires_at' => null]);
+    });
+
     it('connect-session omits return_url when return_path is empty', function (): void {
         config(['hub.oauth.return_path' => '']);
 

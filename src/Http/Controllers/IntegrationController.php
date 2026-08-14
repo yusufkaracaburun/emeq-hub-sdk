@@ -70,13 +70,26 @@ class IntegrationController extends Controller
                 returnUrl: $returnUrl,
             );
 
-            return response()->json([
-                'url' => $session['url'] ?? null,
-                'expires_at' => $session['expires_at'] ?? null,
-            ]);
+            return response()->json($this->connectSessionResponse($session));
         } catch (HubException $e) {
             return $this->hubError($e);
         }
+    }
+
+    /**
+     * Hub's response is untrusted JSON, narrowed the same way `returnPath()`
+     * narrows config — a non-string value reads as absent rather than
+     * widening the generated OpenAPI schema (and consumer TypeScript) to `any`.
+     *
+     * @param  array<string, mixed>  $session
+     * @return array{url: string|null, expires_at: string|null}
+     */
+    private function connectSessionResponse(array $session): array
+    {
+        return [
+            'url' => is_string($session['url'] ?? null) ? $session['url'] : null,
+            'expires_at' => is_string($session['expires_at'] ?? null) ? $session['expires_at'] : null,
+        ];
     }
 
     private function returnPath(): string
