@@ -23,7 +23,7 @@ removable: capture the responses.
   the error envelopes, plus `HubMock::accounting()` for wiring the lot into
   `MockClient::global()` in one line, and `HubMock::fixture()` for the raw
   payload. New public namespace, hence the minor bump.
-- **`src/Testing/fixtures/*.json`** — 17 responses captured from a live Hub
+- **`src/Testing/fixtures/*.json`** — 16 responses captured from a live Hub
   against a connected provider, then redacted. Same files feed the SDK's own
   tests, so a consumer testing against `HubMock` tests against the shape this
   package treats as the truth.
