@@ -207,6 +207,7 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 - **Partner SDKs in the consumer** — do not require `emeq/exact-api` here; those are Hub-internal.
 - **`return_url`** — snake_case on the wire; build the URL server-side from your host (open-redirect guard on the Hub).
 - **Idempotency** — `createDocument` requires a key that survives a retry. Stable means *same document, same key*, not one key per process: `external_id` is the canonical document key and the intended source. A fresh `Str::uuid()` per call cancels the header out — the retry after a timeout gets a new key and books the same document a second time.
+- **A validation finding's `blocking` field is optional — absent is not `false`.** Some `warning`-severity findings reject the booking anyway (Hub says so in their own `message`); `blocking` is the field meant to replace parsing that text. Read it via `Emeq\HubSdk\Resources\Finding::isBlocking($finding)`, which answers `null` — never a guessed `false` — when the key is missing (an undeployed or older Hub) or not a boolean. Never derive it from `severity` yourself.
 
 ## Testing your integration
 
@@ -264,6 +265,10 @@ What the captures show, and what a hand-written mock tends to get wrong:
 - `validateDocument()` answers `200` either way — read `valid`, never the HTTP
   status. A clean document still returns findings: a matched relation comes back
   as `info`, so `findings === []` is not the success test.
+- **`validate-clean.json` and `validate-findings.json` predate `blocking`.**
+  Both were captured before Hub started sending the field, so their findings
+  carry none — exercising `Finding::isBlocking()`'s "unknown" answer, not its
+  known one. A fresh capture follows once Hub ships the field.
 - `referenceData()` is grouped by kind — `{gl: [...], vat: [...], journal: [...]}`.
   Items carry no `kind` of their own, and `attrs` is `[]` when empty but an
   object when filled.
