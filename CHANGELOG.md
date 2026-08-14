@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.12.0] — 2026-08-15
+
+Hub is adding an additive `blocking` field to every `validateDocument()`
+finding — built and tested on Hub's side, not deployed yet. This release adds
+the honest way to read it once it lands, and closes an untyped leak this
+package's own consumer BFF had.
+
+### Added
+
+- **`Emeq\HubSdk\Resources\Finding::isBlocking()`** — reads a finding's
+  `blocking` field without guessing at Hub's semantics. Some `warning`-severity
+  findings reject the booking anyway (Hub says so in their own `message`);
+  `blocking` is the field meant to replace parsing that text, and some Hub
+  deployments will not send it yet. Absent or non-boolean answers `null` —
+  never a guessed `false` — so a consumer cannot mistake "Hub hasn't told me"
+  for "nothing blocks". `severity` and `valid` keep their existing meaning;
+  nothing about them changed.
+
+### Fixed
+
+- **`IntegrationController::connectSession()` leaked `mixed` `url` /
+  `expires_at`.** `$session['url'] ?? null` still typed as `mixed`, widening
+  the consumer's generated schema for both fields to `any`. Narrowed with
+  `is_string()`, same pattern `returnPath()` already used for config, behind
+  an explicit `array{url: string|null, expires_at: string|null}` return type.
+
+### Documentation
+
+- **`IntegrationController::index()`** now states the shape it answers —
+  `list<array<string, mixed>>`, the same type `Integrations::list()` already
+  declares. Item keys stay untyped on purpose: Hub's discovery payload is
+  data-driven per provider, and narrowing keys here would mean hard-coding a
+  schema ADR-0001 deliberately keeps out of the SDK.
+
+### Not done, on purpose
+
+- **`validate-clean.json` and `validate-findings.json` were not recaptured.**
+  Both predate `blocking` — Hub hasn't deployed it yet, so a live capture today
+  would still come back without the field. Hand-editing a `blocking` key into
+  a "captured" fixture would turn honest test data into invented Hub semantics
+  with a stamp of authority; `tools/capture-fixtures.php` reruns once
+  Hub ships it.
+
 ## [0.11.0] — 2026-08-13
 
 Reverses the "not done, on purpose" call on test affordances from 0.10.1. That
