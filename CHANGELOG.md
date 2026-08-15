@@ -2,10 +2,9 @@
 
 ## [0.12.0] — 2026-08-15
 
-Hub is adding an additive `blocking` field to every `validateDocument()`
-finding — built and tested on Hub's side, not deployed yet. This release adds
-the honest way to read it once it lands, and closes an untyped leak this
-package's own consumer BFF had.
+Hub adds an additive `blocking` field to every `validateDocument()` finding.
+This release adds the honest way to read it — including from a Hub that predates
+the field — and closes an untyped leak this package's own consumer BFF had.
 
 ### Added
 
@@ -37,11 +36,11 @@ package's own consumer BFF had.
 ### Not done, on purpose
 
 - **`validate-clean.json` and `validate-findings.json` were not recaptured.**
-  Both predate `blocking` — Hub hasn't deployed it yet, so a live capture today
-  would still come back without the field. Hand-editing a `blocking` key into
-  a "captured" fixture would turn honest test data into invented Hub semantics
-  with a stamp of authority; `tools/capture-fixtures.php` reruns once
-  Hub ships it.
+  Both predate `blocking`. Hand-editing the key into a "captured" fixture would
+  turn honest test data into invented Hub semantics with a stamp of authority,
+  so they stay as they are until `tools/capture-fixtures.php` reruns against a
+  Hub that sends the field. Their current shape is also what an older Hub still
+  answers, which is exactly the `null` path `Finding::isBlocking()` covers.
 
 ## [0.11.0] — 2026-08-13
 
