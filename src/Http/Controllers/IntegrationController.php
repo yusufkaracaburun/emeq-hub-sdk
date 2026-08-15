@@ -36,7 +36,9 @@ class IntegrationController extends Controller
     ) {}
 
     /**
-     * Answers `list<array<string, mixed>>`, same shape `Integrations::list()`
+     * List the integrations this account can connect.
+     *
+     * Answers `list<array<string, mixed>>`, the same shape `Integrations::list()`
      * declares. Item keys stay untyped on purpose: Hub's discovery payload is
      * data-driven per provider, and narrowing keys here would mean hard-coding
      * a schema ADR-0001 deliberately keeps out of the SDK.

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.12.1] — 2026-08-15
+
+### Fixed
+
+- **`IntegrationController::index()`'s docblock leaked into consumer API docs.**
+  Scramble takes the first paragraph as an endpoint `summary`, so a consumer's
+  generated OpenAPI carried this package's internal rationale about ADR-0001 as
+  the public description of `GET /integrations`. Split into a one-line summary
+  plus the rationale below it.
+
 ## [0.12.0] — 2026-08-15
 
 Hub adds an additive `blocking` field to every `validateDocument()` finding.
