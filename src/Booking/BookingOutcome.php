@@ -20,6 +20,7 @@ class BookingOutcome
         public readonly ?string $message,
         public readonly ?HubDocument $record,
         public readonly bool $needsManualCheck = false,
+        public readonly ?string $reason = null,
     ) {}
 
     /**
@@ -62,9 +63,24 @@ class BookingOutcome
         return new static(false, 422, $message, $record, needsManualCheck: true);
     }
 
-    public static function unavailable(?string $message = null): static
+    /**
+     * The bookkeeping said nothing usable. `$reason` carries the exception text
+     * for the consumer's log; the screen gets the translated line, because the
+     * exception names an external id and speaks English.
+     */
+    public static function unavailable(?string $reason = null): static
     {
-        return new static(false, 503, $message ?? BookingMessages::line('temporarily_unavailable'), null);
+        return new static(false, 503, BookingMessages::line('temporarily_unavailable'), null, reason: $reason);
+    }
+
+    /**
+     * The same document is already on its way — wait for that run rather than
+     * go and look at the bookkeeping. Retryable like any other 503, but the
+     * user is told which of the two waits they are in.
+     */
+    public static function alreadyInProgress(?string $reason = null): static
+    {
+        return new static(false, 503, BookingMessages::line('already_in_progress'), null, reason: $reason);
     }
 
     public static function upstreamFailure(string $message): static

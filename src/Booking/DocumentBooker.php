@@ -6,6 +6,7 @@ namespace Emeq\HubSdk\Booking;
 
 use Closure;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
+use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Exceptions\DocumentNotBookable;
 use Emeq\HubSdk\Exceptions\HubException;
@@ -76,7 +77,7 @@ class DocumentBooker
             ->get(fn (): HubDocument => $this->attemptBooking($document, $externalId, $attachments, $createRelation));
 
         if (! $result instanceof HubDocument) {
-            throw new BookingTemporarilyUnavailable(
+            throw new BookingAlreadyInProgress(
                 "Another booking attempt for {$externalId} is already in progress."
             );
         }
@@ -141,7 +142,7 @@ class DocumentBooker
             throw new BookingTemporarilyUnavailable($e->getMessage(), previous: $e);
         } catch (HubException $e) {
             if (in_array($e->error, static::TRANSIENT_ERRORS, true)) {
-                throw new BookingTemporarilyUnavailable($e->getMessage(), previous: $e);
+                throw new BookingAlreadyInProgress($e->getMessage(), previous: $e);
             }
 
             $isRejection = in_array($e->error, static::REJECTIONS, true);

@@ -70,6 +70,23 @@ it('ships copy for the outcomes a caller cannot phrase itself', function (): voi
     expect(BookingOutcome::notFound()->message)->toBe('This document no longer exists.')
         ->and(BookingOutcome::notFound()->status)->toBe(404)
         ->and(BookingOutcome::notAllowed()->status)->toBe(403)
-        ->and(BookingOutcome::unavailable()->message)->toContain('Try again shortly.')
+        ->and(BookingOutcome::unavailable()->message)->toContain('briefly unreachable')
         ->and(BookingOutcome::notFound('Weg.')->message)->toBe('Weg.');
+});
+
+it('keeps the generic line for the user and the real cause for the log', function (): void {
+    $outcome = BookingOutcome::unavailable('Upstream is down.');
+
+    expect($outcome->message)->toContain('briefly unreachable')
+        ->and($outcome->reason)->toBe('Upstream is down.');
+});
+
+it('tells a document that is already being booked apart from unreachable bookkeeping', function (): void {
+    $inProgress = BookingOutcome::alreadyInProgress('Another booking attempt for inv-1 is already in progress.');
+
+    expect($inProgress->message)->toBe('A booking of this document is already running. Wait for it to finish.')
+        ->and($inProgress->message)->not->toBe(BookingOutcome::unavailable()->message)
+        ->and($inProgress->status)->toBe(503)
+        ->and($inProgress->mayRetry())->toBeTrue()
+        ->and($inProgress->reason)->toBe('Another booking attempt for inv-1 is already in progress.');
 });

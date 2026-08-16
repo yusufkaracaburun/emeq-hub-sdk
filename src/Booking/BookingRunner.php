@@ -6,6 +6,7 @@ namespace Emeq\HubSdk\Booking;
 
 use Closure;
 use Emeq\HubSdk\Booking\Contracts\ResolvesBookableDocument;
+use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Exceptions\DocumentNotAuthorized;
 use Emeq\HubSdk\Exceptions\DocumentNotBookable;
@@ -107,8 +108,10 @@ class BookingRunner
                 $withAttachment ? $document->attachments : null,
                 $createRelation,
             );
-        } catch (BookingTemporarilyUnavailable) {
-            return BookingOutcome::unavailable();
+        } catch (BookingAlreadyInProgress $e) {
+            return BookingOutcome::alreadyInProgress($e->getMessage());
+        } catch (BookingTemporarilyUnavailable $e) {
+            return BookingOutcome::unavailable($e->getMessage());
         } catch (HubException $e) {
             return BookingOutcome::upstreamFailure($e->getMessage());
         }

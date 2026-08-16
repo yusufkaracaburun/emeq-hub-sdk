@@ -12,7 +12,8 @@ return [
 
     'not_found' => 'This document no longer exists.',
     'not_allowed' => 'You may not edit this document, so you may not book it either.',
-    'temporarily_unavailable' => 'A booking of this document is already in flight, or the bookkeeping is briefly unreachable. Try again shortly.',
+    'temporarily_unavailable' => 'The bookkeeping is briefly unreachable. Nothing was booked; try again shortly.',
+    'already_in_progress' => 'A booking of this document is already running. Wait for it to finish.',
 
     'error' => [
         'mapping_failed' => 'The bookkeeping does not know this relation or code yet.',

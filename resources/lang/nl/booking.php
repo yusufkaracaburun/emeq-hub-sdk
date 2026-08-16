@@ -12,7 +12,8 @@ return [
 
     'not_found' => 'Dit document bestaat niet meer.',
     'not_allowed' => 'Je mag dit document niet bewerken, dus ook niet boeken.',
-    'temporarily_unavailable' => 'Er loopt al een boeking van dit document, of de boekhouding is even niet bereikbaar. Probeer het zo nog eens.',
+    'temporarily_unavailable' => 'De boekhouding is even niet bereikbaar. Er is niets geboekt; probeer het zo nog eens.',
+    'already_in_progress' => 'Er loopt al een boeking van dit document. Wacht tot die klaar is.',
 
     'error' => [
         'mapping_failed' => 'De boekhouding kent deze relatie of code nog niet.',

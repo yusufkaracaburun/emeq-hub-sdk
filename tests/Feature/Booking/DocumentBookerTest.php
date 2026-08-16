@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Emeq\HubSdk\Booking\DocumentBooker;
 use Emeq\HubSdk\Booking\HubDocument;
+use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\CreateDocumentRequest;
@@ -110,7 +111,7 @@ it('leaves no row when Hub is still working on the same key', function (): void 
     mockHub(hubError('idempotency_request_in_progress', 409, 'CONFLICT'));
 
     expect(fn () => booker()->book(canonicalDocument()))
-        ->toThrow(BookingTemporarilyUnavailable::class);
+        ->toThrow(BookingAlreadyInProgress::class);
 
     expect(HubDocument::query()->count())->toBe(0);
 });
@@ -204,7 +205,7 @@ it('refuses to queue behind a booking that is already running', function (): voi
     $held->get();
 
     expect(fn () => booker()->book(canonicalDocument()))
-        ->toThrow(BookingTemporarilyUnavailable::class);
+        ->toThrow(BookingAlreadyInProgress::class);
 
     expect(HubDocument::query()->count())->toBe(0);
 

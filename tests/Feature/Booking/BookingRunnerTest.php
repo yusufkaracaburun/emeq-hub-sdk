@@ -91,6 +91,8 @@ it('answers 503 when nothing was decided, so the caller may retry', function ():
 
     expect($outcome->mayRetry())->toBeTrue()
         ->and($outcome->status)->toBe(503)
+        ->and($outcome->message)->not->toContain('Upstream is down.')
+        ->and($outcome->reason)->toContain('Upstream is down.')
         ->and(HubDocument::query()->count())->toBe(0);
 });
 

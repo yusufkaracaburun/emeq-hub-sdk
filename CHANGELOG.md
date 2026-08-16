@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.15.0] — 2026-08-16
+
+A 503 said one sentence for three different situations, and the sentence named
+none of them. Found in a consumer's batch run, where two overlapping runs over
+the same documents produced a screenful of "or the bookkeeping is briefly
+unreachable" for documents that were, in fact, being booked fine.
+
+### Added
+
+- **`Exceptions\BookingAlreadyInProgress`**, a narrower
+  `BookingTemporarilyUnavailable` thrown when this exact document is already on
+  its way: the booking lock is held by a concurrent attempt, or Hub answered
+  `idempotency_request_in_progress`. Existing `catch (BookingTemporarilyUnavailable)`
+  keeps catching both.
+
+- **`Booking\BookingOutcome::alreadyInProgress()`**, the 503 that tells the user
+  to wait for the run they already started rather than go and look at the
+  bookkeeping. Still `mayRetry()`.
+
+- **`Booking\BookingOutcome::$reason`**, the exception text behind a 503, for
+  the consumer's log. It is not the user's message: it names an external id and
+  speaks English. `BookingRunner` fills it, and a consumer that logs its
+  outcomes can finally tell a held lock from a throttled Hub — previously both
+  arrived as a 503 with no trace of which.
+
+### Changed
+
+- **`Booking\BookingOutcome::unavailable()` takes a reason, not a message
+  override.** The user-facing copy is now always the translated line.
+
+  **Breaking:** a caller passing a string to override the copy no longer does
+  so. No consumer did.
+
+- **`hub::booking.temporarily_unavailable` no longer covers two situations.**
+  It now means only "the bookkeeping is unreachable"; the new
+  `hub::booking.already_in_progress` covers a document that is already being
+  booked. Consumers that published `hub-translations` must add the new key.
+
 ## [0.14.0] — 2026-08-16
 
 Found while wiring 0.13.0 into its first consumer.
