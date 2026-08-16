@@ -29,6 +29,8 @@ class CheckResultResource extends JsonResource
             'module' => $this->outcome->module,
             'id' => $this->outcome->id,
             'checked' => $this->outcome->checked(),
+            'status' => $this->outcome->status,
+            'may_retry' => $this->outcome->mayRetry(),
             'valid' => (bool) ($result['valid'] ?? false),
             'summary' => $result['summary'] ?? null,
             'findings' => $result['findings'] ?? [],

@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.13
+composer require emeq/hub-sdk:^0.14
 ```
 
 ```bash

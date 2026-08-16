@@ -69,21 +69,23 @@ class BookingRunner
         try {
             $document = $this->documents->resolve($module, $id);
         } catch (ModelNotFoundException) {
-            return new CheckOutcome($module, $id, null, BookingMessages::line('not_found'));
+            return new CheckOutcome($module, $id, 404, null, BookingMessages::line('not_found'));
         } catch (DocumentNotAuthorized) {
-            return new CheckOutcome($module, $id, null, BookingMessages::line('not_allowed'));
+            return new CheckOutcome($module, $id, 403, null, BookingMessages::line('not_allowed'));
         } catch (DocumentNotBookable $e) {
-            return new CheckOutcome($module, $id, null, $e->getMessage());
+            return new CheckOutcome($module, $id, 422, null, $e->getMessage());
         }
 
         try {
-            return new CheckOutcome($module, $id, $this->hub->accounting()->validateDocument($document->document), null);
+            return new CheckOutcome($module, $id, 200, $this->hub->accounting()->validateDocument($document->document), null);
         } catch (HubException $e) {
-            return new CheckOutcome($module, $id, null, $e->getMessage());
+            // Hub could not answer. Says nothing about the document, so it is
+            // not a 422 the user can act on.
+            return new CheckOutcome($module, $id, 502, null, $e->getMessage());
         } catch (Throwable $e) {
             report($e);
 
-            return new CheckOutcome($module, $id, null, BookingMessages::line('temporarily_unavailable'), retryable: true);
+            return new CheckOutcome($module, $id, 503, null, BookingMessages::line('temporarily_unavailable'));
         }
     }
 

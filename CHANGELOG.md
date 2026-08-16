@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.14.0] — 2026-08-16
+
+Found while wiring 0.13.0 into its first consumer.
+
+### Changed
+
+- **`Booking\CheckOutcome` carries a `status`**, the same vocabulary
+  {@see BookingOutcome} already used: 200 when Hub answered, 404 / 403 / 422 for
+  a document that is missing, not this user's or not mappable, 502 when Hub
+  failed to answer and 503 when the check broke for an unrelated reason. It
+  previously flattened all of those into a message plus a `retryable` flag, so a
+  caller could not tell "your document is wrong" (the user's to fix) from "Hub
+  could not answer" (nobody's) — and every consumer would have had to
+  reconstruct that split from the message text.
+
+  **Breaking:** the `retryable` property is gone; use `mayRetry()`, which reads
+  the status. The constructor takes `status` as its third argument.
+
+- **`Booking\Resources\CheckResultResource` exposes `status` and `may_retry`**,
+  so a batch report can group what can be repeated without inspecting copy.
+
 ## [0.13.0] — 2026-08-16
 
 The booking core moves out of the first consumer and into the SDK. Everything

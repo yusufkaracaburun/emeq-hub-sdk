@@ -49,7 +49,9 @@ it('turns a missing document into 404 and an unauthorised one into 403', functio
 
     expect($runner->bookOne('invoice', 'gone')->status)->toBe(404)
         ->and($runner->bookOne('invoice', 'theirs')->status)->toBe(403)
+        ->and($runner->checkOne('invoice', 'gone')->status)->toBe(404)
         ->and($runner->checkOne('invoice', 'gone')->message)->toBe('This document no longer exists.')
+        ->and($runner->checkOne('invoice', 'theirs')->status)->toBe(403)
         ->and($runner->checkOne('invoice', 'theirs')->checked())->toBeFalse();
 });
 
@@ -112,8 +114,9 @@ it('hands back Hub\'s verdict on a check', function (): void {
     $outcome = runner(['invoice:inv-1' => sendable()])->checkOne('invoice', 'inv-1');
 
     expect($outcome->checked())->toBeTrue()
+        ->and($outcome->status)->toBe(200)
         ->and($outcome->message)->toBeNull()
-        ->and($outcome->retryable)->toBeFalse();
+        ->and($outcome->mayRetry())->toBeFalse();
 
     $resource = (new CheckResultResource($outcome))->toArray(Request::create('/'));
 
@@ -130,7 +133,29 @@ it('reports a Hub error on a check without claiming the document is wrong', func
     $outcome = runner(['invoice:inv-1' => sendable()])->checkOne('invoice', 'inv-1');
 
     expect($outcome->checked())->toBeFalse()
+        ->and($outcome->status)->toBe(502)
+        ->and($outcome->mayRetry())->toBeFalse()
         ->and($outcome->message)->toBe('Connection niet gevonden.');
+});
+
+it('separates a Hub that could not answer from a document that is wrong', function (): void {
+    app(HubConnector::class)->withMockClient(new MockClient([
+        ValidateDocumentRequest::class => MockResponse::make()->throw(new RuntimeException('cURL error 28')),
+    ]));
+
+    $outcome = runner(['invoice:inv-1' => sendable()])->checkOne('invoice', 'inv-1');
+
+    expect($outcome->status)->toBe(503)
+        ->and($outcome->mayRetry())->toBeTrue();
+});
+
+it('refuses to check a document that can never be sent', function (): void {
+    $outcome = runner(['invoice:draft' => new DocumentNotBookable('Invoice 7 is a draft.')])
+        ->checkOne('invoice', 'draft');
+
+    expect($outcome->status)->toBe(422)
+        ->and($outcome->mayRetry())->toBeFalse()
+        ->and($outcome->message)->toBe('Invoice 7 is a draft.');
 });
 
 it('stops a batch once its time budget is spent', function (): void {
