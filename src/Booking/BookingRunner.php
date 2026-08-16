@@ -11,6 +11,8 @@ use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Exceptions\DocumentNotAuthorized;
 use Emeq\HubSdk\Exceptions\DocumentNotBookable;
 use Emeq\HubSdk\Exceptions\HubException;
+use Emeq\HubSdk\Exceptions\RateLimitException;
+use Emeq\HubSdk\Exceptions\ServerException;
 use Emeq\HubSdk\Hub;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Config;
@@ -79,6 +81,11 @@ class BookingRunner
 
         try {
             return new CheckOutcome($module, $id, 200, $this->hub->accounting()->validateDocument($document->document), null);
+        } catch (RateLimitException|ServerException $e) {
+            // Throttled or upstream is down: repeating this check is exactly the
+            // right move, so it must not land on 502 with the answers that are
+            // nobody's to act on. Same split {@see bookOne()} already makes.
+            return new CheckOutcome($module, $id, 503, null, BookingMessages::line('temporarily_unavailable'), $e->retryAfter);
         } catch (HubException $e) {
             // Hub could not answer. Says nothing about the document, so it is
             // not a 422 the user can act on.
@@ -109,9 +116,9 @@ class BookingRunner
                 $createRelation,
             );
         } catch (BookingAlreadyInProgress $e) {
-            return BookingOutcome::alreadyInProgress($e->getMessage());
+            return BookingOutcome::alreadyInProgress($e->getMessage(), $e->retryAfter);
         } catch (BookingTemporarilyUnavailable $e) {
-            return BookingOutcome::unavailable($e->getMessage());
+            return BookingOutcome::unavailable($e->getMessage(), $e->retryAfter);
         } catch (HubException $e) {
             return BookingOutcome::upstreamFailure($e->getMessage());
         }

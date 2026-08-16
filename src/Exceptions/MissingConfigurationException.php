@@ -70,6 +70,18 @@ class MissingConfigurationException extends HubException
         );
     }
 
+    public static function bookingLockShorterThanTimeout(int $lockSeconds, int $timeoutSeconds): self
+    {
+        return new self(
+            "hub.booking.lock_seconds ({$lockSeconds}) must exceed hub.timeout ({$timeoutSeconds}): "
+            .'a lock that expires while the send is still in flight lets a second attempt '
+            .'start alongside the first. Leave room for attachment rendering as well.',
+            error: 'booking_lock_shorter_than_timeout',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
     public static function missingAccountResolver(): self
     {
         return new self(

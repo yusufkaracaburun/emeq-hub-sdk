@@ -6,6 +6,7 @@ use Emeq\HubSdk\Booking\DocumentBooker;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
+use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\CreateDocumentRequest;
 use Emeq\HubSdk\Testing\HubMock;
@@ -40,14 +41,14 @@ function booker(): DocumentBooker
     return app(DocumentBooker::class);
 }
 
-function hubError(string $error, int $status = 422, string $category = 'VALIDATION_ERROR'): MockResponse
+function hubError(string $error, int $status = 422, string $category = 'VALIDATION_ERROR', array $headers = []): MockResponse
 {
     return MockResponse::make([
         'error' => $error,
         'message' => "Hub says {$error}.",
         'category' => $category,
         'request_id' => '01JZZ0000000000000000000RQ',
-    ], $status);
+    ], $status, $headers);
 }
 
 afterEach(function (): void {
@@ -217,4 +218,122 @@ it('refuses a document with no external id, which is also its idempotency key', 
 
     expect(fn () => booker()->book(canonicalDocument(['external_id' => ''])))
         ->toThrow(InvalidArgumentException::class);
+});
+
+it('treats both of Hub\'s "already running" answers as undecided', function (string $error): void {
+    mockHub(hubError($error, 409, 'CONFLICT'));
+
+    expect(fn () => booker()->book(canonicalDocument()))
+        ->toThrow(BookingAlreadyInProgress::class);
+
+    expect(HubDocument::query()->count())->toBe(0);
+})->with(['idempotency_request_in_progress', 'document_sync_in_progress']);
+
+it('carries the wait Hub asked for, so a retry does not have to guess', function (): void {
+    mockHub(hubError('upstream_unavailable', 429, 'RATE_LIMIT', ['Retry-After' => '17']));
+
+    try {
+        booker()->book(canonicalDocument());
+    } catch (BookingTemporarilyUnavailable $e) {
+        expect($e->retryAfter)->toBe(17);
+
+        return;
+    }
+
+    $this->fail('Expected a BookingTemporarilyUnavailable.');
+});
+
+it('ignores a Retry-After it cannot read as seconds', function (): void {
+    mockHub(hubError('upstream_unavailable', 429, 'RATE_LIMIT', ['Retry-After' => 'Wed, 21 Oct 2026 07:28:00 GMT']));
+
+    try {
+        booker()->book(canonicalDocument());
+    } catch (BookingTemporarilyUnavailable $e) {
+        expect($e->retryAfter)->toBeNull();
+
+        return;
+    }
+
+    $this->fail('Expected a BookingTemporarilyUnavailable.');
+});
+
+it('offers an interrupted document again and settles it on Hub\'s replay', function (): void {
+    HubDocument::query()->create([
+        'account_id' => 'tenant-1',
+        'type' => 'sales_invoice',
+        'external_id' => 'inv-1',
+        'status' => HubDocument::STATUS_UNKNOWN,
+        'error' => 'connection_interrupted',
+    ]);
+
+    mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($record->error)->toBeNull()
+        ->and(HubDocument::query()->count())->toBe(1);
+});
+
+it('keeps the posted answer when a second attempt lost the race to the ledger', function (): void {
+    // The lock stopped covering the send, so another attempt decided this same
+    // document while this one was on the wire and inserted its row first.
+    $mock = new MockClient([
+        CreateDocumentRequest::class => function () {
+            HubDocument::query()->create([
+                'account_id' => 'tenant-1',
+                'type' => 'sales_invoice',
+                'external_id' => 'inv-1',
+                'status' => HubDocument::STATUS_FAILED,
+                'error' => 'mapping_failed',
+            ]);
+
+            return HubMock::createDocument();
+        },
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($record->external_ref)->toBe('55555555-5555-4555-8555-555555555555')
+        ->and($record->error)->toBeNull()
+        ->and(HubDocument::query()->count())->toBe(1);
+});
+
+it('does not demote a document the winner already booked', function (): void {
+    $mock = new MockClient([
+        CreateDocumentRequest::class => function () {
+            HubDocument::query()->create([
+                'account_id' => 'tenant-1',
+                'type' => 'sales_invoice',
+                'external_id' => 'inv-1',
+                'status' => HubDocument::STATUS_POSTED,
+                'external_ref' => 'winner-ref',
+            ]);
+
+            return hubError('mapping_failed');
+        },
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($record->external_ref)->toBe('winner-ref')
+        ->and(HubDocument::query()->count())->toBe(1);
+});
+
+it('refuses a lock that would expire while the send is still in flight', function (): void {
+    config()->set('hub.timeout', 30);
+    config()->set('hub.booking.lock_seconds', 30);
+
+    mockHub(HubMock::createDocument());
+
+    expect(fn () => booker()->book(canonicalDocument()))
+        ->toThrow(MissingConfigurationException::class);
+
+    expect(HubDocument::query()->count())->toBe(0);
 });

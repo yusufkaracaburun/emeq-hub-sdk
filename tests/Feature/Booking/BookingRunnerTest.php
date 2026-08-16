@@ -151,6 +151,49 @@ it('separates a Hub that could not answer from a document that is wrong', functi
         ->and($outcome->mayRetry())->toBeTrue();
 });
 
+it('lets a throttled check be repeated instead of blaming Hub for it', function (int $status): void {
+    app(HubConnector::class)->withMockClient(new MockClient([
+        ValidateDocumentRequest::class => MockResponse::make([
+            'error' => 'rate_limited',
+            'message' => 'Too many requests.',
+            'category' => 'RATE_LIMIT',
+        ], $status, ['Retry-After' => '9']),
+    ]));
+
+    $outcome = runner(['invoice:inv-1' => sendable()])->checkOne('invoice', 'inv-1');
+
+    expect($outcome->status)->toBe(503)
+        ->and($outcome->mayRetry())->toBeTrue()
+        ->and($outcome->retryAfter)->toBe(9)
+        ->and($outcome->checked())->toBeFalse();
+
+    $resource = (new CheckResultResource($outcome))->toArray(Request::create('/'));
+
+    expect($resource['retry_after'])->toBe(9)
+        ->and($resource['may_retry'])->toBeTrue();
+})->with([429, 503]);
+
+it('passes the wait Hub asked for through to the batch report', function (): void {
+    app(HubConnector::class)->withMockClient(new MockClient([
+        CreateDocumentRequest::class => MockResponse::make([
+            'error' => 'rate_limited',
+            'message' => 'Too many requests.',
+            'category' => 'RATE_LIMIT',
+        ], 429, ['Retry-After' => '30']),
+    ]));
+
+    $results = runner(['invoice:inv-1' => sendable()])
+        ->book([['module' => 'invoice', 'id' => 'inv-1']]);
+
+    expect($results[0]->outcome->retryAfter)->toBe(30);
+
+    $resource = (new BatchResultResource($results[0]))->toArray(Request::create('/'));
+
+    expect($resource['retry_after'])->toBe(30)
+        ->and($resource['may_retry'])->toBeTrue()
+        ->and($resource['status'])->toBe(503);
+});
+
 it('refuses to check a document that can never be sent', function (): void {
     $outcome = runner(['invoice:draft' => new DocumentNotBookable('Invoice 7 is a draft.')])
         ->checkOne('invoice', 'draft');

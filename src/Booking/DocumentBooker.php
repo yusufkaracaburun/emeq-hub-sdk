@@ -16,6 +16,7 @@ use Emeq\HubSdk\Exceptions\ServerException;
 use Emeq\HubSdk\Hub;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -41,8 +42,14 @@ class DocumentBooker
     /**
      * Errors that say nothing about the document itself. Retrying with the same
      * idempotency key is safe and is the only correct response.
+     *
+     * Hub guards a booking twice over and each guard has its own word for "wait":
+     * `idempotency_request_in_progress` from the Idempotency-Key claim, and
+     * `document_sync_in_progress` from the per-connection claim that outlives it.
+     * Both are 409s that mean the same thing, and treating either as a failure
+     * would write a permanent no into the ledger for a document nobody refused.
      */
-    protected const TRANSIENT_ERRORS = ['idempotency_request_in_progress'];
+    protected const TRANSIENT_ERRORS = ['idempotency_request_in_progress', 'document_sync_in_progress'];
 
     /**
      * Answers about this document that will not change on a retry.
@@ -139,10 +146,10 @@ class DocumentBooker
         try {
             $result = $this->hub->accounting()->createDocument($document, $externalId);
         } catch (RateLimitException|ServerException $e) {
-            throw new BookingTemporarilyUnavailable($e->getMessage(), previous: $e);
+            throw new BookingTemporarilyUnavailable($e->getMessage(), $e->retryAfter, $e);
         } catch (HubException $e) {
             if (in_array($e->error, static::TRANSIENT_ERRORS, true)) {
-                throw new BookingAlreadyInProgress($e->getMessage(), previous: $e);
+                throw new BookingAlreadyInProgress($e->getMessage(), $e->retryAfter, $e);
             }
 
             $isRejection = in_array($e->error, static::REJECTIONS, true);
@@ -162,8 +169,11 @@ class DocumentBooker
             // Not a HubException: a connect/read timeout (Saloon's
             // FatalRequestException) or another transport failure. Hub may
             // have received and posted the document anyway — record that the
-            // outcome is unknown instead of leaving no trace at all. Do not
-            // retry automatically: a blind resend is exactly the danger here.
+            // outcome is unknown instead of leaving no trace at all.
+            //
+            // Nothing retries this on its own, because only the caller knows the
+            // document still says what it said. Offering it again unchanged is
+            // safe and is how an unknown row is resolved: see {@see book()}.
             return $this->store($record, $document, [
                 'status' => HubDocument::STATUS_UNKNOWN,
                 'error' => 'connection_interrupted',
@@ -198,9 +208,48 @@ class DocumentBooker
         $record->account_id = $this->account->accountId();
         $record->type = $this->documentType($document);
         $record->external_id = $this->externalId($document);
-        $record->save();
+
+        try {
+            $record->save();
+        } catch (UniqueConstraintViolationException) {
+            return $this->mergeWithWinner($record);
+        }
 
         return $record;
+    }
+
+    /**
+     * Two attempts decided the same document and the ledger's identity index let
+     * only one of them in.
+     *
+     * Reachable whenever the booking lock stops covering the send — an expired
+     * lease, a flushed cache store — after which both attempts read "no row yet"
+     * and both insert. Hub still refused to book it twice; what is left here is
+     * to keep the better of the two answers, and `posted` is always the better
+     * one. Demoting it would hide a document that is in the bookkeeping.
+     */
+    protected function mergeWithWinner(HubDocument $mine): HubDocument
+    {
+        $winner = HubDocument::query()
+            ->where('account_id', $mine->account_id)
+            ->where('type', $mine->type)
+            ->where('external_id', $mine->external_id)
+            ->firstOrFail();
+
+        if ($mine->status !== HubDocument::STATUS_POSTED || $winner->status === HubDocument::STATUS_POSTED) {
+            return $winner;
+        }
+
+        $winner->fill([
+            'status' => HubDocument::STATUS_POSTED,
+            'external_ref' => $mine->external_ref,
+            'external_number' => $mine->external_number,
+            'booked_at' => $mine->booked_at,
+            'error' => null,
+            'error_message' => null,
+        ])->save();
+
+        return $winner;
     }
 
     /**
@@ -274,11 +323,28 @@ class DocumentBooker
         return $store->lock($this->lockKey($externalId), $this->lockSeconds());
     }
 
+    /**
+     * The lock has to outlive the send it protects. Once it expires early, a
+     * second attempt starts while the first is still on the wire, and the two
+     * race to write the same ledger identity — {@see mergeWithWinner()} exists
+     * to survive that, not to make it acceptable.
+     *
+     * Refused at the point of use rather than at boot: a consumer that never
+     * books should not be stopped by a booking setting.
+     */
     protected function lockSeconds(): int
     {
-        $seconds = Config::get('hub.booking.lock_seconds');
+        $configured = Config::get('hub.booking.lock_seconds');
+        $seconds = is_numeric($configured) ? (int) $configured : 40;
 
-        return is_numeric($seconds) ? (int) $seconds : 40;
+        $timeout = Config::get('hub.timeout');
+        $timeout = is_numeric($timeout) ? (int) $timeout : 30;
+
+        if ($seconds <= $timeout) {
+            throw MissingConfigurationException::bookingLockShorterThanTimeout($seconds, $timeout);
+        }
+
+        return $seconds;
     }
 
     /**

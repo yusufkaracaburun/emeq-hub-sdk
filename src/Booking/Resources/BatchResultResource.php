@@ -28,6 +28,7 @@ class BatchResultResource extends JsonResource
             'booked' => $outcome->booked,
             'status' => $outcome->status,
             'may_retry' => $outcome->mayRetry(),
+            'retry_after' => $outcome->retryAfter,
             'needs_manual_check' => $outcome->needsManualCheck,
             'message' => $outcome->message,
             'booking' => BookingResource::maybe($outcome->record),

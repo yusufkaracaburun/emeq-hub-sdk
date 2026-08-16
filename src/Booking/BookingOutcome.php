@@ -21,6 +21,7 @@ class BookingOutcome
         public readonly ?HubDocument $record,
         public readonly bool $needsManualCheck = false,
         public readonly ?string $reason = null,
+        public readonly ?int $retryAfter = null,
     ) {}
 
     /**
@@ -67,10 +68,13 @@ class BookingOutcome
      * The bookkeeping said nothing usable. `$reason` carries the exception text
      * for the consumer's log; the screen gets the translated line, because the
      * exception names an external id and speaks English.
+     *
+     * `$retryAfter` is how long Hub asked the caller to wait, when it said so.
+     * A queued retry should honour it; see {@see self::mayRetry()}.
      */
-    public static function unavailable(?string $reason = null): static
+    public static function unavailable(?string $reason = null, ?int $retryAfter = null): static
     {
-        return new static(false, 503, BookingMessages::line('temporarily_unavailable'), null, reason: $reason);
+        return new static(false, 503, BookingMessages::line('temporarily_unavailable'), null, reason: $reason, retryAfter: $retryAfter);
     }
 
     /**
@@ -78,9 +82,9 @@ class BookingOutcome
      * go and look at the bookkeeping. Retryable like any other 503, but the
      * user is told which of the two waits they are in.
      */
-    public static function alreadyInProgress(?string $reason = null): static
+    public static function alreadyInProgress(?string $reason = null, ?int $retryAfter = null): static
     {
-        return new static(false, 503, BookingMessages::line('already_in_progress'), null, reason: $reason);
+        return new static(false, 503, BookingMessages::line('already_in_progress'), null, reason: $reason, retryAfter: $retryAfter);
     }
 
     public static function upstreamFailure(string $message): static

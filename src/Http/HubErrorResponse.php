@@ -18,7 +18,31 @@ final class HubErrorResponse
 {
     public static function toException(Response $response, ?Throwable $previous = null): HubException
     {
-        return HubException::fromEnvelope(self::body($response), $response->status(), $previous);
+        return HubException::fromEnvelope(
+            self::body($response),
+            $response->status(),
+            $previous,
+            self::retryAfter($response),
+        );
+    }
+
+    /**
+     * How long Hub asked the caller to wait — set on the 429 its rate limiter
+     * returns and on the 409 that means "this document is already on its way".
+     *
+     * Only the delay-in-seconds form is read. The HTTP-date the RFC also allows
+     * would have to be trusted against this machine's clock, and a wrong wait is
+     * worse than none: it either hammers Hub or strands the document.
+     */
+    private static function retryAfter(Response $response): ?int
+    {
+        $header = $response->header('Retry-After');
+
+        if (! is_string($header) || ! ctype_digit(mb_trim($header))) {
+            return null;
+        }
+
+        return (int) mb_trim($header);
     }
 
     /**
