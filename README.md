@@ -160,11 +160,50 @@ time ([ADR-0003](docs/adr/0003-the-booking-ledger-lives-in-the-consumer.md)):
 | `201` | `posted` + `external_ref` / `external_number` | never — a correction is a credit note |
 | `document_already_posted`, `idempotency_key_reuse`, `upstream_rejected` | `rejected` | only after fixing the document |
 | any other Hub error | `failed` (reported) | after fixing the cause |
-| `429` / `5xx` / `idempotency_request_in_progress` | **no row** — throws `BookingTemporarilyUnavailable` | yes, same key |
-| transport dropped mid-send | `unknown` | **no** — check the bookkeeping first |
+| `429` / `5xx` | **no row** — throws `BookingTemporarilyUnavailable` | yes, same key |
+| `idempotency_request_in_progress`, `document_sync_in_progress` | **no row** — throws `BookingAlreadyInProgress` | yes, once the run in front finishes |
+| transport dropped mid-send | `unknown` | yes, if the document still says the same thing |
 
 "No row" and "a row saying failed" mean different things to the next run. That
 is the whole retry policy.
+
+An `unknown` row means the send was interrupted and nobody knows whether it
+landed. Offering the same document again, unchanged, is safe and is how such a
+row is resolved: Hub replays the response it stored against that idempotency
+key, and once that has expired its per-connection guard recognises the document
+by content fingerprint and answers `deduplicated` instead of booking it twice.
+Change the content in between and you get `document_already_posted` — also
+correct, because a correction is a credit note. Nothing retries this for you:
+only your app knows the document is unchanged.
+
+### Retrying under load
+
+`BookingTemporarilyUnavailable`, `BookingAlreadyInProgress` and both outcome
+types carry `retryAfter` — the seconds Hub asked you to wait, taken from its
+`Retry-After` header. Honour it. Hub rate-limits per consumer, so a fleet that
+retries on a fixed interval synchronises itself into one throttled herd.
+
+The SDK deliberately does not retry inside the call: waiting there pins a PHP
+worker for the duration. Retry from a queue instead.
+
+```php
+class BookDocumentJob implements ShouldQueue
+{
+    public int $tries = 5;
+
+    public function handle(BookingRunner $runner): void
+    {
+        $outcome = $runner->bookOne('invoice', $this->uuid);
+
+        if ($outcome->mayRetry()) {
+            $this->release($outcome->retryAfter ?? $this->backoffSeconds());
+        }
+    }
+}
+```
+
+`mayRetry()` is true only for 503 — the answers that say nothing about your
+document. A 422 or 502 must not be retried blindly.
 
 ### Booking from a controller
 
@@ -236,6 +275,11 @@ EMEQ_HUB_BOOKING_LOCK_SECONDS=40
 EMEQ_HUB_BOOKING_BATCH_SECONDS=60
 EMEQ_HUB_BOOKING_PAGE_LENGTH=25
 ```
+
+`EMEQ_HUB_BOOKING_LOCK_SECONDS` must exceed `EMEQ_HUB_TIMEOUT`, and booking
+refuses to run when it does not: a lock that expires while the send is still in
+flight lets a second attempt start alongside the first. Leave room for
+attachment rendering on top of the timeout.
 
 Publish `hub-migrations` and migrate `hub_documents` onto the database that
 holds the documents it tracks — the backlog joins the two, so they cannot live

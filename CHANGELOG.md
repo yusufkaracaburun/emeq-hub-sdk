@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.16.0] — 2026-08-16
+
+Found while working out what five consumer apps booking at the same time
+actually do to Hub. For correctness the answer was reassuring — Hub guards a
+booking twice over, with an Idempotency-Key claim and a per-connection claim
+behind it. For throughput it was not: Hub rate-limits per consumer, and this SDK
+threw away every word Hub said about how long to wait.
+
+### Added
+
+- **`Exceptions\HubException::$retryAfter`** — the `Retry-After` Hub sets on the
+  429 from its rate limiter and on the 409 that means "this document is already
+  on its way", in seconds. Only the delay form is read; the HTTP-date the RFC
+  also allows would have to be trusted against this machine's clock, and a wrong
+  wait either hammers Hub or strands the document.
+
+- **`Exceptions\BookingTemporarilyUnavailable::$retryAfter`** (and so
+  `BookingAlreadyInProgress`), **`Booking\BookingOutcome::$retryAfter`** and
+  **`Booking\CheckOutcome::$retryAfter`**, exposed as `retry_after` on
+  `BatchResultResource` and `CheckResultResource`.
+
+  Without this a consumer could only retry on a fixed interval, which is exactly
+  how a fleet of consumers synchronises itself into one throttled herd. The SDK
+  still does not retry on its own: waiting inside the call pins a request worker
+  for the duration. README shows the queue-job shape instead.
+
+### Changed
+
+- **A throttled or unreachable Hub during `check()` answers 503, not 502.**
+  `bookOne()` already made this split; `checkOne()` flattened a rate limit into
+  "Hub could not answer", which reads as nobody's problem and is not retryable.
+  The same condition now gets the same answer on both paths.
+
+- **`hub.booking.lock_seconds` must exceed `hub.timeout`**, and booking refuses
+  to run when it does not. A lock that expires while the send is still in flight
+  lets a second attempt start alongside the first — the one situation the lock
+  exists to prevent. Defaults (40 vs 30) already satisfy it.
+
+### Fixed
+
+- **`document_sync_in_progress` is no longer recorded as a failed booking.** Hub
+  has two guards and each has its own word for "wait": the Idempotency-Key claim
+  says `idempotency_request_in_progress`, the per-connection claim behind it says
+  `document_sync_in_progress`. Only the first was known here, so the second fell
+  through to the failure branch — writing a permanent no into the ledger, and
+  reporting it, for a document nobody had refused.
+
+- **Losing the race to the ledger no longer throws.** Two attempts that both
+  decide the same document — reachable once the booking lock stops covering the
+  send — both insert, and the ledger's identity index lets one of them in. The
+  loser now reads the winning row and keeps the better of the two answers rather
+  than surfacing a `UniqueConstraintViolationException`. `posted` is always the
+  better one; demoting it would hide a document that is in the bookkeeping.
+
+### Documentation
+
+- **How to resolve an `unknown` row.** Offering the same document again,
+  unchanged, is safe: Hub replays the response stored against that idempotency
+  key, and once that has expired its per-connection guard recognises the document
+  by content fingerprint and answers `deduplicated`. Change the content in
+  between and you get `document_already_posted`, which is also correct. The SDK
+  never does this for you — only the consumer knows the document is unchanged.
+
 ## [0.15.0] — 2026-08-16
 
 A 503 said one sentence for three different situations, and the sentence named

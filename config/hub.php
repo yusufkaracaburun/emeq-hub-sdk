@@ -75,8 +75,10 @@ return [
     | locks: Laravel's `database` default needs the framework's cache_locks
     | table, so point this at redis/memcached to skip that.
     |
-    | `lock_seconds` is how long one attempt may hold that lock. Keep it above
-    | `timeout` above, to cover attachment rendering plus the send.
+    | `lock_seconds` is how long one attempt may hold that lock. It must exceed
+    | `timeout` above and booking refuses to run when it does not: a lock that
+    | expires mid-send lets a second attempt start alongside the first. Leave
+    | room for attachment rendering on top of the timeout.
     |
     | `batch_seconds` bounds one BookingRunner batch, so a run cannot outlive
     | the request that started it. The caller gets fewer results than it asked
