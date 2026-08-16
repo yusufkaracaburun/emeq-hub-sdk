@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use Emeq\HubSdk\Tests\BookingTestCase;
 use Emeq\HubSdk\Tests\RoutesEnabledTestCase;
 use Emeq\HubSdk\Tests\TestCase;
 
+uses(BookingTestCase::class)->in('Feature/Booking');
 uses(TestCase::class)->in('Feature/HubClientTest.php');
 uses(TestCase::class)->in('Feature/HubMockTest.php');
 uses(TestCase::class)->in('Feature/WebhookProcessingTest.php');

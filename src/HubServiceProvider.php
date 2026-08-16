@@ -22,8 +22,10 @@ class HubServiceProvider extends PackageServiceProvider
         $package
             ->name('hub')
             ->hasConfigFile('hub')
+            ->hasTranslations()
             // Publish-only — do not auto-load (multi-DB consumers pick the connection).
             ->hasMigration('create_webhook_calls_table')
+            ->hasMigration('create_hub_documents_table')
             ->hasInstallCommand(function (InstallCommand $command): void {
                 $command
                     ->publishConfigFile()
@@ -35,8 +37,10 @@ class HubServiceProvider extends PackageServiceProvider
                         $command->line('3. Bind ResolvesWebhookAccount for inbound Hub webhooks');
                         $command->line('4. Route::webhooks(\'webhooks/emeq-hub\', \'emeq-hub\') + CSRF except');
                         $command->line('5. Migrate webhook_calls on the webhook DB (tenant DB if multi-DB)');
-                        $command->line('6. Listen for HubConnectionRevoked / HubWebhookReceived / HubWebhookIgnored');
-                        $command->line('7. Multi-DB: set hub.webhook.job (+ profile) in config/hub.php');
+                        $command->line('6. Booking documents? Migrate hub_documents on the DB that holds them');
+                        $command->line('   and set hub.booking.connection when that is not your default');
+                        $command->line('7. Listen for HubConnectionRevoked / HubWebhookReceived / HubWebhookIgnored');
+                        $command->line('8. Multi-DB: set hub.webhook.job (+ profile) in config/hub.php');
                     });
             });
     }

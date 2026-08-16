@@ -58,6 +58,18 @@ class MissingConfigurationException extends HubException
         );
     }
 
+    public static function bookingLockStoreNotLockable(string $store): self
+    {
+        return new self(
+            "Cache store [{$store}] does not support atomic locks, which serializing "
+            .'booking attempts requires. Run the framework cache_locks migration for the '
+            .'database store, or point hub.booking.lock_store at redis/memcached.',
+            error: 'booking_lock_store_not_lockable',
+            category: 'CONFIGURATION_ERROR',
+            status: 503,
+        );
+    }
+
     public static function missingAccountResolver(): self
     {
         return new self(

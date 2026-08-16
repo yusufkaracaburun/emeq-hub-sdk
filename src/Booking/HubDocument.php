@@ -1,0 +1,146 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Emeq\HubSdk\Booking;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+
+/**
+ * What the bookkeeping did with one document.
+ *
+ * Keyed the way Hub defines a document's identity — (account, type,
+ * external_id) — so one row covers every kind of document a consumer books,
+ * without a foreign key to any of them.
+ *
+ * A record of what this consumer sent and what Hub answered, not a mirror of
+ * the bookkeeping. See ADR-0003.
+ *
+ * @property int $id
+ * @property string $account_id
+ * @property string $type
+ * @property string $external_id
+ * @property string|null $party_external_id
+ * @property string $status
+ * @property string|null $external_ref
+ * @property string|null $external_number
+ * @property string|null $error
+ * @property string|null $error_message
+ * @property Carbon|null $booked_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ */
+class HubDocument extends Model
+{
+    public const STATUS_POSTED = 'posted';
+
+    public const STATUS_REJECTED = 'rejected';
+
+    public const STATUS_FAILED = 'failed';
+
+    /**
+     * The send to the bookkeeping was interrupted (e.g. a connect/read
+     * timeout) and its outcome is not known. Hub may have received and posted
+     * the document anyway; only a manual check can tell.
+     */
+    public const STATUS_UNKNOWN = 'unknown';
+
+    /**
+     * One external_id can carry more than one row, because the type changed
+     * between attempts. The posted row describes the document; without this
+     * order a read can hand back its non-posted sibling, which skips the "do
+     * not resend" guard and demotes a document that is already booked.
+     */
+    private const POSTED_FIRST = 'CASE WHEN status = ? THEN 0 ELSE 1 END';
+
+    protected $table = 'hub_documents';
+
+    /** @var list<string> */
+    protected $fillable = [
+        'account_id',
+        'type',
+        'external_id',
+        'party_external_id',
+        'status',
+        'external_ref',
+        'external_number',
+        'error',
+        'error_message',
+        'booked_at',
+    ];
+
+    /** @var array<string, string> */
+    protected $casts = [
+        // Providers send the document number as an integer; it is a label, not a sum.
+        'external_number' => 'string',
+        'booked_at' => 'datetime',
+    ];
+
+    /**
+     * Declares no connection of its own: a ledger read against the wrong
+     * database answers "not booked yet", and the next run posts a duplicate
+     * into a real administration. Consumers that keep the ledger off their
+     * default connection say so once, in `hub.booking.connection`.
+     */
+    public function getConnectionName(): ?string
+    {
+        $connection = config('hub.booking.connection');
+
+        return is_string($connection) && $connection !== ''
+            ? $connection
+            : parent::getConnectionName();
+    }
+
+    /**
+     * The booking of each given document, keyed by its external id, scoped to
+     * one account: the same external_id can belong to an unrelated document in
+     * a different administration after a re-coupling.
+     *
+     * Not keyed by type as well: a caller holds a document, not a Hub type, and
+     * one invoice is a sales_invoice or a credit_note depending on its total.
+     * Siblings collapse under {@see self::POSTED_FIRST}.
+     *
+     * @param  list<string>  $externalIds
+     * @return Collection<string, static>
+     */
+    public static function forExternalIds(array $externalIds, string $accountId): Collection
+    {
+        $documents = static::query()
+            ->where('account_id', $accountId)
+            ->whereIn('external_id', array_filter($externalIds))
+            ->orderByRaw(self::POSTED_FIRST, [self::STATUS_POSTED])
+            ->orderByDesc('id')
+            ->get();
+
+        $byExternalId = [];
+
+        foreach ($documents as $document) {
+            $byExternalId[$document->external_id] ??= $document;
+        }
+
+        return new Collection($byExternalId);
+    }
+
+    /**
+     * The row a new booking attempt continues, under the same precedence as
+     * {@see self::forExternalIds()}.
+     *
+     * Returns an unsaved row when this document has never been attempted.
+     */
+    public static function forBooking(string $externalId, string $accountId): self
+    {
+        $existing = static::query()
+            ->where('account_id', $accountId)
+            ->where('external_id', $externalId)
+            ->orderByRaw(self::POSTED_FIRST, [self::STATUS_POSTED])
+            ->orderByDesc('id')
+            ->first();
+
+        return $existing ?? static::make([
+            'account_id' => $accountId,
+            'external_id' => $externalId,
+        ]);
+    }
+}

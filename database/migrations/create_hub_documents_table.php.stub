@@ -1,0 +1,53 @@
+<?php
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Where a booking into the connected bookkeeping is recorded.
+ *
+ * Carries no foreign key: Hub defines a document's identity as
+ * (account, type, external_id), so one table covers every kind of document the
+ * consumer books.
+ *
+ * `party_external_id` pins the relation key that was used, because a party
+ * unlinked from its parent record would otherwise book under a different key
+ * next time and open a second relation in the bookkeeping.
+ *
+ * Publish this onto the connection named by `hub.booking.connection` — a ledger
+ * on the wrong database reads as "not booked yet" and the next run posts a
+ * duplicate into a real administration.
+ */
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('hub_documents', function (Blueprint $table) {
+            $table->bigIncrements('id');
+
+            $table->string('account_id');
+            $table->string('type');
+            $table->string('external_id');
+            $table->string('party_external_id')->nullable();
+            $table->string('status');
+            $table->string('external_ref')->nullable();
+            $table->string('external_number')->nullable();
+            $table->string('error')->nullable();
+            $table->text('error_message')->nullable();
+            $table->timestamp('booked_at')->nullable();
+
+            $table->timestamps();
+
+            $table->unique(['account_id', 'type', 'external_id'], 'hub_documents_identity_unique');
+            // A document is looked up before its type is known: one invoice is a
+            // sales_invoice or a credit_note depending on its total.
+            $table->index('external_id');
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('hub_documents');
+    }
+};

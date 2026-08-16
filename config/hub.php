@@ -61,6 +61,41 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Booking ledger
+    |--------------------------------------------------------------------------
+    |
+    | `hub_documents` records what this consumer sent and what Hub answered.
+    | It is the authority on what may safely be sent again, so it has to sit on
+    | the database that holds the documents it tracks: a ledger read against the
+    | wrong connection answers "not booked yet" and the next run posts a
+    | duplicate into a real administration. Null uses your default connection.
+    |
+    | `lock_store` names the cache store that serializes concurrent attempts on
+    | one document. Null uses your default store, which must support atomic
+    | locks: Laravel's `database` default needs the framework's cache_locks
+    | table, so point this at redis/memcached to skip that.
+    |
+    | `lock_seconds` is how long one attempt may hold that lock. Keep it above
+    | `timeout` above, to cover attachment rendering plus the send.
+    |
+    | `batch_seconds` bounds one BookingRunner batch, so a run cannot outlive
+    | the request that started it. The caller gets fewer results than it asked
+    | for and repeats with the remainder.
+    |
+    | `page_length` is the backlog's default page size when the caller names
+    | none. BacklogRepository::MAX_PAGE_LENGTH is the ceiling either way.
+    |
+    */
+    'booking' => [
+        'connection' => env('EMEQ_HUB_BOOKING_CONNECTION'),
+        'lock_store' => env('EMEQ_HUB_BOOKING_LOCK_STORE'),
+        'lock_seconds' => (int) env('EMEQ_HUB_BOOKING_LOCK_SECONDS', 40),
+        'batch_seconds' => (int) env('EMEQ_HUB_BOOKING_BATCH_SECONDS', 60),
+        'page_length' => (int) env('EMEQ_HUB_BOOKING_PAGE_LENGTH', 25),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Integration BFF routes (opt-in)
     |--------------------------------------------------------------------------
     |

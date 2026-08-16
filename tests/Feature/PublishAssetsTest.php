@@ -19,8 +19,21 @@ test('publishes hub config and migrations', function () {
         ->assertSuccessful();
 
     $migrations = collect(File::files(database_path('migrations')))
-        ->filter(fn ($file) => str_contains($file->getFilename(), 'create_webhook_calls_table'));
-    expect($migrations)->not->toBeEmpty();
+        ->map(fn ($file) => $file->getFilename());
+
+    expect($migrations->filter(fn (string $name) => str_contains($name, 'create_webhook_calls_table')))->not->toBeEmpty()
+        ->and($migrations->filter(fn (string $name) => str_contains($name, 'create_hub_documents_table')))->not->toBeEmpty();
+});
+
+test('publishes the outcome copy so consumers can reword it', function () {
+    expect(trans('hub::booking.error.provider_disabled'))
+        ->toBe('The connection to the bookkeeping is switched off.');
+
+    $this->artisan('vendor:publish', ['--tag' => 'hub-translations', '--force' => true])
+        ->assertSuccessful();
+
+    expect(File::exists(lang_path('vendor/hub/nl/booking.php')))->toBeTrue()
+        ->and(File::get(lang_path('vendor/hub/nl/booking.php')))->toContain('De boekhouding');
 });
 
 test('hub install command is registered', function () {
