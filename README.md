@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.11
+composer require emeq/hub-sdk:^0.13
 ```
 
 ```bash
@@ -40,6 +40,9 @@ EMEQ_HUB_ROUTES_MIDDLEWARE=api,auth:sanctum
 EMEQ_HUB_WEBHOOK_LOCK_STORE=redis
 # Relative path on YOUR host only (no https://…). Empty = omit return_url.
 EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
+# Booking documents? See "Booking documents" below.
+EMEQ_HUB_BOOKING_CONNECTION=
+EMEQ_HUB_BOOKING_LOCK_STORE=redis
 ```
 
 ### Checklist
@@ -50,6 +53,9 @@ EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 4. Receiving Hub webhooks? Bind `ResolvesWebhookAccount`, register the route and
    migrate `webhook_calls` — [`docs/webhooks.md`](docs/webhooks.md). The package
    does **not** auto-run migrations.
+5. Booking documents? Migrate `hub_documents` onto the database that holds them
+   and set `hub.booking.connection` when that is not your default —
+   [Booking documents](#booking-documents).
 
 The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
 (default `false`). Middleware must be non-empty **and carry an `auth`-family
@@ -111,6 +117,134 @@ rather than cargo-culting empty profile/job subclasses:
 Wiring, multi-DB connection placement (**gets this wrong and it fails
 silently**), and deduplication: [`docs/webhooks.md`](docs/webhooks.md).
 
+## Booking documents
+
+`Hub::accounting()->createDocument()` is the raw call. Everything below it —
+the ledger, the retry policy, the backlog, the batch loop — ships here, and
+three interfaces are what you implement.
+
+| You write | The SDK takes over |
+|---|---|
+| a mapper: your model → canonical document | `DocumentBooker` — lock, send, classify, record |
+| `ResolvesBookableDocument` — find, authorise, map | `BookingRunner` — check / book, one or a batch |
+| `ProvidesBacklogSources` — your tables → nine columns | `BacklogRepository` — join, filter, sort, page, summarise |
+
+Nothing here knows your data model, and nothing in your app has to know Hub's
+retry rules.
+
+### Booking one document
+
+```php
+use Emeq\HubSdk\Booking\BookingOutcome;
+use Emeq\HubSdk\Booking\DocumentBooker;
+
+$record = app(DocumentBooker::class)->book(
+    $this->mapper->toDocument($invoice),      // your mapping, your models
+    attachments: fn () => [$this->pdf->render($invoice)],
+    createRelation: false,
+);
+
+$outcome = BookingOutcome::from($record);     // booked / refused / needs a human
+```
+
+Mapping stays in your app: what a sales invoice looks like is your data model.
+Throw `Emeq\HubSdk\Exceptions\DocumentNotBookable` from your mapper for
+documents that can never be sent (a draft, a missing party) — nothing is sent
+and nothing is recorded.
+
+Rules the ledger encodes, and the reason it exists rather than asking Hub every
+time ([ADR-0003](docs/adr/0003-the-booking-ledger-lives-in-the-consumer.md)):
+
+| Hub answered | Ledger | Retry |
+|---|---|---|
+| `201` | `posted` + `external_ref` / `external_number` | never — a correction is a credit note |
+| `document_already_posted`, `idempotency_key_reuse`, `upstream_rejected` | `rejected` | only after fixing the document |
+| any other Hub error | `failed` (reported) | after fixing the cause |
+| `429` / `5xx` / `idempotency_request_in_progress` | **no row** — throws `BookingTemporarilyUnavailable` | yes, same key |
+| transport dropped mid-send | `unknown` | **no** — check the bookkeeping first |
+
+"No row" and "a row saying failed" mean different things to the next run. That
+is the whole retry policy.
+
+### Booking from a controller
+
+Implement `ResolvesBookableDocument` once — find the record, authorise it, map
+it — and `BookingRunner` answers for one document or a batch:
+
+```php
+use Emeq\HubSdk\Booking\BookableDocument;
+use Emeq\HubSdk\Booking\Contracts\ResolvesBookableDocument;
+use Emeq\HubSdk\Exceptions\DocumentNotAuthorized;
+
+class BookableDocuments implements ResolvesBookableDocument
+{
+    public function resolve(string $module, string $id): BookableDocument
+    {
+        $invoice = Invoice::where('uuid', $id)->firstOrFail();   // ModelNotFoundException → 404
+
+        if ($request->user()->cannot('book', $invoice)) {
+            throw new DocumentNotAuthorized;                     // → 403
+        }
+
+        return new BookableDocument(
+            $this->mapper->toDocument($invoice),                 // DocumentNotBookable → 422
+            attachments: fn () => [$this->pdf->render($invoice)],
+        );
+    }
+}
+```
+
+```php
+$outcome = app(BookingRunner::class)->bookOne('invoice', $uuid, createRelation: false);
+$results = app(BookingRunner::class)->book($request->documents());   // stops on its time budget
+$checks  = app(BookingRunner::class)->check($request->documents());  // free, catches most refusals
+```
+
+A batch stops once `hub.booking.batch_seconds` is spent and returns fewer
+results than asked. Repeat with the remainder — safe, because an already-posted
+document is never sent twice.
+
+Routes, request validation and your response envelope stay yours; the SDK ships
+`Booking\Resources\*` and `Backlog\Resources\*` for the payload shapes.
+
+### The backlog
+
+"Which of my documents are not booked yet" is a join over your own tables, which
+Hub cannot participate in. Implement `ProvidesBacklogSources` — return one query
+per module with the nine columns the interface names, excluding posted documents
+with `PostedDocuments::excluding()` — and:
+
+```php
+$page    = app(BacklogRepository::class)->paginate($filters);  // rows carry hub_document
+$summary = app(BacklogRepository::class)->summary($filters);   // whole filter, not the page
+```
+
+Filters: `search_term`, `start_date`, `end_date`, `modules`, `status`,
+`direction`, `min_amount`, `max_amount`, `sort_by`, `order`, `page_length`.
+Validate `sort_by` / `direction` / `status` against `BacklogRepository::SORTS`,
+`::DIRECTIONS` and `BacklogStatus::all()`, and `page_length` against
+`::MAX_PAGE_LENGTH`.
+
+### Configuration
+
+```env
+# Connection holding hub_documents. Empty = your default connection.
+EMEQ_HUB_BOOKING_CONNECTION=tenant
+# Cache store serializing attempts on one document. Empty = default (must lock).
+EMEQ_HUB_BOOKING_LOCK_STORE=redis
+EMEQ_HUB_BOOKING_LOCK_SECONDS=40
+EMEQ_HUB_BOOKING_BATCH_SECONDS=60
+EMEQ_HUB_BOOKING_PAGE_LENGTH=25
+```
+
+Publish `hub-migrations` and migrate `hub_documents` onto the database that
+holds the documents it tracks — the backlog joins the two, so they cannot live
+on separate connections. A ledger on the wrong connection reads as "not booked
+yet", and the next run posts a duplicate into a real administration.
+
+Outcome copy ships in `en` and `nl`; `php artisan vendor:publish
+--tag=hub-translations` to reword it.
+
 ## Usage
 
 ```php
@@ -148,8 +282,8 @@ while ($page->hasMore()) {
 ## API surface
 
 Prefer these from app code: `Facades\Hub`, `Contracts\*`, `Resources\*`,
-`Webhooks\*`, `Events\*`, and `Testing\*` in your test suite. `Http\*` is
-package-internal (BFF / Saloon).
+`Booking\*`, `Backlog\*`, `Webhooks\*`, `Events\*`, and `Testing\*` in your test
+suite. `Http\*` is package-internal (BFF / Saloon).
 
 | SDK | Hub |
 |---|---|

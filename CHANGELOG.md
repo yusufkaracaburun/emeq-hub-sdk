@@ -1,5 +1,115 @@
 # Changelog
 
+## [0.13.0] — 2026-08-16
+
+The booking core moves out of the first consumer and into the SDK. Everything
+here was running in production in `emeq/system`; what stayed behind is the part
+that knows an app's data model (mappers, backlog sources, attachment renderers).
+Nothing existing changed — this release is additive.
+
+### Added
+
+- **`Booking\HubDocument` + a `create_hub_documents_table` migration stub** —
+  the ledger of what this consumer sent and what Hub answered, keyed the way Hub
+  defines a document's identity: `(account_id, type, external_id)`. Why it lives
+  in the consumer rather than being read back from Hub:
+  [ADR-0003](docs/adr/0003-the-booking-ledger-lives-in-the-consumer.md).
+  Publish-only, per ADR-0002. Reads `hub.booking.connection` and declares no
+  connection of its own — a ledger on the wrong database answers "not booked
+  yet" and the next run posts a duplicate into a real administration.
+
+- **`Booking\DocumentBooker`** — books one canonical document and records the
+  outcome. Takes a document array, not a model: mapping stays in the consumer.
+  What it encodes, and what a second consumer would otherwise have to rediscover
+  by posting duplicates into someone's bookkeeping:
+  - `429`, `5xx` and `idempotency_request_in_progress` say nothing about the
+    document, so they write **no row** and throw
+    `BookingTemporarilyUnavailable`. "No row" and "a row saying failed" are the
+    difference between a safe retry and a wrong one.
+  - `document_already_posted`, `idempotency_key_reuse` and `upstream_rejected`
+    are answers about this document — `rejected`, not `failed`, and not reported
+    as an error.
+  - A dropped connection records `unknown`: Hub may have posted it anyway, so
+    nothing may resend it automatically.
+  - A document already `posted` is never sent again. Identical content is a
+    no-op and changed content is refused, which would demote a posted row.
+  - `party_external_id` is pinned to whatever the first attempt used, so
+    unlinking a party from its parent record cannot open a second relation
+    upstream.
+  - Concurrent attempts on one document fail fast instead of queueing, behind a
+    lock scoped to `(account, external_id)` — not to type, because one invoice
+    is a `sales_invoice` or a `credit_note` depending on its live total.
+  - Attachments are rendered inside that error handling (pass a closure), so a
+    renderer that throws records `attachment_render_failed` instead of losing
+    the attempt.
+
+- **`Booking\BookingOutcome`** — maps a decided ledger row to what a caller
+  should say and with which status: booked (200), refused (422), needs a human
+  (422 + `needsManualCheck`), retry later (503), Hub failed (502). Only 503
+  answers `mayRetry()`.
+
+- **`Booking\BookingLedger`** — account-scoped ledger reads, so no caller has to
+  remember that an unscoped read shows another administration's bookings.
+
+- **`Exceptions\DocumentNotBookable`** — base class for a consumer's own
+  "this can never be sent" exceptions (a draft, a missing party), so the SDK can
+  tell them apart from "did not book this time" without knowing their names.
+
+- **`Support\DutchVatNumber`** — normalises and validates a Dutch VAT number
+  under both check-digit schemes the Belastingdienst has issued (eleven-test and
+  mod-97), adding the country code Dutch bookkeeping commonly leaves off.
+  Anything that fails is dropped rather than sent: a wrong VAT number lands on
+  the relation and ends up on returns.
+
+- **`Booking\BookingRunner`** — checks and books by `(module, id)`, one or a
+  batch, behind `Booking\Contracts\ResolvesBookableDocument`. Owns the table
+  nobody wants to rediscover: missing is 404, unauthorised is 403, unmappable is
+  a refusal, an undecided send is 503, and anything unexpected is reported
+  rather than shown raw. A batch stops once `hub.booking.batch_seconds` is
+  spent, so a run cannot outlive its request — safe to repeat with the
+  remainder, because an already-posted document is never sent twice.
+
+- **`Exceptions\DocumentNotAuthorized`** — the SDK's own word for "this user may
+  not book it", so authorising stays entirely the consumer's (a gate, a policy,
+  a role check) and this package gains no auth dependency.
+
+- **`Backlog\BacklogRepository`** — "which of my documents are not booked yet",
+  behind `Backlog\Contracts\ProvidesBacklogSources`. The consumer returns one
+  query per module with nine named columns; this owns the left join against the
+  ledger, the `not_booked` filter (the absence of a row, so it cannot ride the
+  same `whereIn` as the others), sorting with stable tiebreakers, paging, and a
+  summary counted over the whole filter rather than the page. Rows come back
+  carrying their full ledger row, not just the joined status — a refusal's
+  reason is the thing a backlog exists to show.
+
+- **`Backlog\PostedDocuments`** — the "already in the bookkeeping" exclusion for
+  consumer source queries. Ships here because getting its account scope wrong is
+  silent: an unscoped exclusion hides another administration's postings from
+  this one's backlog.
+
+- **`Backlog\BacklogStatus` / `BacklogSummary`**, and JSON resources for both
+  layers: `Booking\Resources\{BookingResource, BatchResultResource,
+  CheckResultResource}` and `Backlog\Resources\{BacklogDocumentResource,
+  BacklogSummaryResource}`. Routes, request validation and the response envelope
+  stay the consumer's — those differ per app and always will.
+
+- **Outcome copy in `en` and `nl`**, published with
+  `vendor:publish --tag=hub-translations`, resolved in one place
+  (`Booking\BookingMessages`) so republishing rewords every outcome at once.
+
+- **`hub.booking.*` config** — `connection`, `lock_store`, `lock_seconds`,
+  `batch_seconds`, `page_length`. The lock store must support atomic locks; one
+  that cannot says so with a configuration error rather than letting two
+  attempts post the same document.
+
+### Not moved, deliberately
+
+Mappers, backlog source queries, attachment renderers, controllers, form
+requests and response envelopes stay in the consumer: they know a data model or
+an app's auth, and generalising them would mean guessing at both. The Dutch
+reverse-charge default (rate `0` on a shifted line meaning 21%) is a tenant-level
+assumption, not a canonical one, and stays with the mapper that makes it.
+
 ## [0.12.1] — 2026-08-15
 
 ### Fixed
