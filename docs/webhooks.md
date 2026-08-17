@@ -47,6 +47,23 @@ if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
 $wireValue = $envelope->event->value; // 'connection.revoked'
 ```
 
+## Changes you caused yourself
+
+Hub subscribes to bookkeeping topics it also writes to. Book an invoice and the
+bookkeeping package reports that change, so the notification travels back to the app
+that asked for it. `$envelope->causedByHub` is `true` for exactly those; the wire
+field `caused_by_hub` is present only then.
+
+```php
+if ($envelope->causedByHub) {
+    return; // your own write, echoed back — writing again is a loop
+}
+```
+
+`false` means "not established", not "definitely the bookkeeper": Hub sets the flag
+only on positive evidence that it wrote the entity itself. Treat an unflagged event
+as a change worth acting on.
+
 ## Deduplication
 
 Deduplication takes a cache lock per account + `X-Emeq-Event-Id` so concurrent

@@ -25,6 +25,14 @@ enum HubWebhookEvent: string
 
     case SALES_INVOICE_CHANGED = 'accounting.sales_invoice.changed';
 
+    case PURCHASE_INVOICE_CHANGED = 'accounting.purchase_invoice.changed';
+
+    case JOURNAL_ENTRY_CHANGED = 'accounting.journal_entry.changed';
+
+    case DOCUMENT_CHANGED = 'accounting.document.changed';
+
+    case LEDGER_ACCOUNT_CHANGED = 'accounting.ledger_account.changed';
+
     case DOCUMENT_SYNCED = 'accounting.document.synced';
 
     case PAYMENT_CHANGED = 'billing.payment.changed';

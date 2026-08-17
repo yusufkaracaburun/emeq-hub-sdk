@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.17.0] — 2026-08-17
+
+Exact approved the App Center scope that had been blocking webhook registration, so
+Hub now subscribes to eight bookkeeping topics instead of two. Four of those cover
+entities Hub writes itself, which means a booking you request travels back to you as
+a change notification. This release carries the vocabulary for the new events and the
+marker that tells your own writes apart from the bookkeeper's.
+
+### Added
+
+- **`Webhooks\HubWebhookEvent::PURCHASE_INVOICE_CHANGED`**,
+  **`JOURNAL_ENTRY_CHANGED`**, **`DOCUMENT_CHANGED`** and **`LEDGER_ACCOUNT_CHANGED`**
+  — `accounting.purchase_invoice.changed`, `accounting.journal_entry.changed`,
+  `accounting.document.changed` and `accounting.ledger_account.changed`. Before this
+  release those decoded to `UNMAPPED`, which the guide tells consumers to ignore, so
+  the events arrived but read as noise.
+
+- **`Webhooks\HubWebhookEnvelope::$causedByHub`** — `true` when Hub established that
+  the change traces back to a write it made on your behalf. Do not write back on
+  those; that is a loop. `false` means not established rather than definitely
+  external, because Hub sets the flag only on positive evidence. `toArray()` emits
+  `caused_by_hub` only when true, mirroring the wire format.
+
 ## [0.16.0] — 2026-08-16
 
 Found while working out what five consumer apps booking at the same time

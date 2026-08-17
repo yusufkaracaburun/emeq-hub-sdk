@@ -12,6 +12,7 @@ namespace Emeq\HubSdk\Webhooks;
  *     provider: string,
  *     account_id: string,
  *     occurred_at: string|null,
+ *     caused_by_hub?: true,
  *     data: array<string, mixed>
  * }
  */
@@ -26,6 +27,7 @@ final class HubWebhookEnvelope
         public readonly string $accountId,
         public readonly ?string $occurredAt,
         public readonly array $data,
+        public readonly bool $causedByHub = false,
     ) {}
 
     public static function tryFromRaw(string $rawBody): ?self
@@ -59,6 +61,7 @@ final class HubWebhookEnvelope
             accountId: self::text($accountId) ?? '',
             occurredAt: self::text($payload['occurred_at'] ?? null),
             data: is_array($data) ? $data : [],
+            causedByHub: ($payload['caused_by_hub'] ?? null) === true,
         );
     }
 
@@ -75,12 +78,18 @@ final class HubWebhookEnvelope
      */
     public function toArray(): array
     {
-        return [
+        $payload = [
             'event' => $this->event->value,
             'provider' => $this->provider,
             'account_id' => $this->accountId,
             'occurred_at' => $this->occurredAt,
             'data' => $this->data,
         ];
+
+        if ($this->causedByHub) {
+            $payload['caused_by_hub'] = true;
+        }
+
+        return $payload;
     }
 }
