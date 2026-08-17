@@ -68,32 +68,59 @@ if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
 $wireValue = $envelope->event->value; // 'connection.revoked'
 ```
 
-## `caused_by_hub` marks an entity Hub has ever written, not this change
+## Finding your own record: `entity_id` and `action`
 
-Hub subscribes to bookkeeping topics it also writes to. Book an invoice and the
-bookkeeping package reports that change, so the notification travels back to the app
-that asked for it — `$envelope->causedByHub` exists to let a consumer recognise that
-echo. It does **not** mean what it sounds like.
+`$envelope->entityId` is the id the bookkeeping package itself gave the changed
+entity — the same id Hub returned when you booked it. That makes it the join key
+between an incoming change and your own ledger row, without parsing a single
+provider-specific field out of `data`.
 
-`causedByHub` is computed from whether a link record exists showing Hub authored
-this entity at some point, *ever* — not whether Hub wrote *this particular* change.
-Once Hub has booked a document, every later notification for that same document
-carries `caused_by_hub: true`, including a bookkeeper hand-editing it in the
-provider's own UI weeks afterwards. That edit is exactly the kind of external
-change a consumer needs to see, and the current flag hides it.
+`$envelope->action` is a `HubWebhookAction` — `CREATED`, `UPDATED`, `DELETED`, or
+`UNMAPPED` for an action a later Hub release names and this one does not. It says
+what happened; `$envelope->event` says to what kind of thing.
+
+Both are nullable, and `null` means "the provider does not tell us", never "no".
+Exact carries both. Mollie's notification is a bare resource id, so there is no
+action. Snelstart carries an action but no entity id this SDK can read.
 
 ```php
-if ($envelope->causedByHub) {
-    // Only tells you Hub wrote this entity at some point — not that Hub wrote
-    // *this* change. Do not use this to decide whether to act on the event.
-}
+$row = HubDocument::query()
+    ->where('account_id', $envelope->accountId)
+    ->where('external_ref', $envelope->entityId)
+    ->first();
 ```
 
-There is currently no reliable way to tell your own write's echo apart from a
-later human correction on the same entity from the SDK alone. A Hub-side fix
-is proposed — a `hub_last_wrote_at` timestamp per entity, so a consumer could
-compare it against the delivery's `occurred_at` — but that field does not exist
-yet, and this SDK makes no assumption about its shape until it ships.
+## Telling your own echo apart from a human edit
+
+Hub subscribes to bookkeeping topics it also writes to. Book an invoice and the
+bookkeeping package reports that change straight back to you. Acting on that echo
+— writing again — is a loop.
+
+Two fields separate the echo from a real change. `$envelope->hubAuthored` says Hub
+has written this entity *at some point ever*; `$envelope->hubLastWroteAt` says when
+it last did. Only the pair is usable: a delivery seconds after Hub's own write is
+almost certainly the echo, while one a week later is a bookkeeper correcting your
+document by hand — exactly the change you need to see.
+
+Hub deliberately does not draw that line for you; it reports the two facts and
+leaves the window to the consumer. `isOwnEcho()` applies a sane one:
+
+```php
+if ($envelope->isOwnEcho()) {
+    return;             // our own write, bouncing back
+}
+
+if ($envelope->isOwnEcho(seconds: 60)) { /* tighter window */ }
+```
+
+Anything it cannot establish reads as *not* an echo — a missing field errs toward
+looking at an event rather than dropping it.
+
+> **Changed in 0.19.0.** `caused_by_hub` / `$envelope->causedByHub` is gone. It
+> promised causality and measured authorship, so a hand-edit on a Hub-booked
+> document arrived flagged `true`. `hubAuthored` carries that same fact under an
+> honest name, and `hubLastWroteAt` supplies the timing it was missing. If you
+> filtered on `causedByHub`, replace it with `isOwnEcho()`.
 
 ## Deduplication
 

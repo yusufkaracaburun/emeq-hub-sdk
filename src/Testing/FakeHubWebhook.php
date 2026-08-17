@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Testing;
 
+use Emeq\HubSdk\Webhooks\HubWebhookAction;
 use Emeq\HubSdk\Webhooks\HubWebhookEnvelope;
 use Emeq\HubSdk\Webhooks\HubWebhookEvent;
 use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
@@ -41,9 +42,12 @@ final class FakeHubWebhook
         array $data = [],
         string $provider = 'exact',
         ?string $occurredAt = null,
-        bool $causedByHub = false,
+        bool $hubAuthored = false,
         ?string $eventId = null,
         ?string $requestId = null,
+        ?string $entityId = null,
+        ?HubWebhookAction $action = null,
+        ?string $hubLastWroteAt = null,
     ): self {
         return new self(
             envelope: new HubWebhookEnvelope(
@@ -52,7 +56,10 @@ final class FakeHubWebhook
                 accountId: $accountId,
                 occurredAt: $occurredAt,
                 data: $data,
-                causedByHub: $causedByHub,
+                hubAuthored: $hubAuthored,
+                entityId: $entityId,
+                action: $action,
+                hubLastWroteAt: $hubLastWroteAt,
             ),
             eventId: $eventId ?? (string) Str::uuid(),
             requestId: $requestId ?? (string) Str::uuid(),
@@ -83,15 +90,21 @@ final class FakeHubWebhook
     public static function salesInvoiceChanged(
         string $accountId,
         string $externalRef = 'ext-test',
-        bool $causedByHub = false,
+        bool $hubAuthored = false,
         string $provider = 'exact',
+        ?string $entityId = null,
+        ?HubWebhookAction $action = HubWebhookAction::UPDATED,
+        ?string $hubLastWroteAt = null,
     ): self {
         return self::event(
             HubWebhookEvent::SALES_INVOICE_CHANGED,
             accountId: $accountId,
             data: ['external_ref' => $externalRef],
-            causedByHub: $causedByHub,
+            hubAuthored: $hubAuthored,
             provider: $provider,
+            entityId: $entityId,
+            action: $action,
+            hubLastWroteAt: $hubLastWroteAt,
         );
     }
 

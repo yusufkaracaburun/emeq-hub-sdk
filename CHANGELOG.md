@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.19.0] — 2026-08-17
+
+Hub now says *which* entity changed and *when it last wrote it*, so a consumer can
+tell its own echo apart from a bookkeeper's correction. This release exposes both
+and retires the field that could not.
+
+### Removed
+
+- **`caused_by_hub` / `HubWebhookEnvelope::$causedByHub`.** The 0.18.0 docs already
+  warned it did not mean what it says: it was an `exists()` on "has Hub ever written
+  this entity", with no time component, so every later notification for a
+  Hub-booked document carried `true` — including a bookkeeper hand-editing it weeks
+  afterwards. Hub no longer sends the key. Replace a filter on it with
+  `$envelope->isOwnEcho()`; replace a read of it with `$envelope->hubAuthored`,
+  which carries the same fact under a name that does not overpromise.
+
+### Added
+
+- **`HubWebhookEnvelope::$entityId`** — the provider's own id for the changed
+  entity, the same id Hub returned when you booked it. The join key between an
+  incoming change and your own ledger row, with no provider-specific parsing of
+  `data`. Null when the provider carries no id this release can read: Exact and
+  Mollie supply one, Snelstart does not (its payload shape is still an open
+  question with the partner, and inventing a field name would be worse than
+  admitting the gap).
+
+- **`HubWebhookEnvelope::$action`**, typed as the new **`HubWebhookAction`** enum —
+  `CREATED`, `UPDATED`, `DELETED`, `UNMAPPED`. Mirrors `HubWebhookEvent`: an action
+  a later Hub release names decodes to `UNMAPPED` instead of throwing, so a new
+  provider needs no SDK release. Absent and `UNMAPPED` differ on purpose — `null`
+  means the provider sends no action at all (Mollie), `UNMAPPED` means it sent one
+  this release has no case for.
+
+- **`HubWebhookEnvelope::$hubAuthored` and `$hubLastWroteAt`** — whether Hub ever
+  wrote this entity, and when it last did. Hub reports both facts and draws no line
+  itself; the echo window belongs to the consumer.
+
+- **`HubWebhookEnvelope::isOwnEcho(int $seconds = 300)`** — the line, applied.
+  `true` only when Hub authored the entity *and* the delivery landed within
+  `$seconds` after Hub's own write. Anything it cannot establish reads as `false`:
+  a missing field errs toward looking at an event rather than dropping it.
+
+- **`FakeHubWebhook::event()` / `::salesInvoiceChanged()`** take `entityId`,
+  `action` and `hubLastWroteAt`, so a consumer test can stage the echo and the
+  later human correction as two distinct deliveries. `salesInvoiceChanged()`
+  defaults `action` to `UPDATED`, matching what Exact actually sends.
+
+### Changed
+
+- **`FakeHubWebhook`'s `causedByHub:` argument is now `hubAuthored:`.** A named
+  argument in an existing test needs renaming; a positional one does not.
+
 ## [0.18.0] — 2026-08-17
 
 `emeq/system` is the first consumer to wire up inbound webhooks end to end, and

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Emeq\HubSdk\Contracts\ResolvesWebhookAccount;
 use Emeq\HubSdk\Testing\FakeHubWebhook;
+use Emeq\HubSdk\Webhooks\HubWebhookAction;
 use Emeq\HubSdk\Webhooks\HubWebhookEnvelope;
 use Emeq\HubSdk\Webhooks\HubWebhookEvent;
 use Emeq\HubSdk\Webhooks\HubWebhookHeaders;
@@ -85,11 +86,24 @@ test('connectionRevoked builds the canonical disconnect envelope', function (): 
         ->and($envelope->data['connection_id'])->toBe('con_1');
 });
 
-test('salesInvoiceChanged builds the canonical change envelope and honours causedByHub', function (): void {
-    $ownWrite = FakeHubWebhook::salesInvoiceChanged('47', causedByHub: true)->envelope();
+test('salesInvoiceChanged builds the canonical change envelope and honours hubAuthored', function (): void {
+    $ownWrite = FakeHubWebhook::salesInvoiceChanged('47', hubAuthored: true)->envelope();
     $externalChange = FakeHubWebhook::salesInvoiceChanged('47')->envelope();
 
     expect($ownWrite->event)->toBe(HubWebhookEvent::SALES_INVOICE_CHANGED)
-        ->and($ownWrite->causedByHub)->toBeTrue()
-        ->and($externalChange->causedByHub)->toBeFalse();
+        ->and($ownWrite->hubAuthored)->toBeTrue()
+        ->and($externalChange->hubAuthored)->toBeFalse();
+});
+
+test('salesInvoiceChanged can stage an echo of the consumers own write', function (): void {
+    $echo = FakeHubWebhook::salesInvoiceChanged(
+        '47',
+        hubAuthored: true,
+        entityId: 'guid-1',
+        hubLastWroteAt: '2026-08-12T10:00:00+00:00',
+    )->envelope();
+
+    expect($echo->entityId)->toBe('guid-1')
+        ->and($echo->action)->toBe(HubWebhookAction::UPDATED)
+        ->and($echo->hubLastWroteAt)->toBe('2026-08-12T10:00:00+00:00');
 });

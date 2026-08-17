@@ -11,8 +11,11 @@ namespace Emeq\HubSdk\Webhooks;
  *     event: string,
  *     provider: string,
  *     account_id: string,
+ *     entity_id?: string,
+ *     action?: string,
  *     occurred_at: string|null,
- *     caused_by_hub?: true,
+ *     hub_authored?: true,
+ *     hub_last_wrote_at?: string,
  *     data: array<string, mixed>
  * }
  */
@@ -20,11 +23,14 @@ final class HubWebhookEnvelope
 {
     /**
      * @param  array<string, mixed>  $data
-     * @param  bool  $causedByHub  True when Hub has ever authored this entity —
-     *                             not when Hub caused this specific change. A
-     *                             human edit on a Hub-booked document still
-     *                             arrives flagged true. See "caused_by_hub"
-     *                             in docs/webhooks.md before branching on it.
+     * @param  bool  $hubAuthored  True when Hub has ever written this entity —
+     *                             not when Hub wrote this change. Pair it with
+     *                             $hubLastWroteAt, or use {@see self::isOwnEcho()}.
+     * @param  string|null  $entityId  The provider's own id for the changed
+     *                                 entity: the same id Hub returned when you
+     *                                 booked it. Null when the provider carries
+     *                                 no id this SDK release can read.
+     * @param  string|null  $hubLastWroteAt  When Hub last wrote this entity.
      */
     public function __construct(
         public readonly HubWebhookEvent $event,
@@ -32,7 +38,10 @@ final class HubWebhookEnvelope
         public readonly string $accountId,
         public readonly ?string $occurredAt,
         public readonly array $data,
-        public readonly bool $causedByHub = false,
+        public readonly bool $hubAuthored = false,
+        public readonly ?string $entityId = null,
+        public readonly ?HubWebhookAction $action = null,
+        public readonly ?string $hubLastWroteAt = null,
     ) {}
 
     public static function tryFromRaw(string $rawBody): ?self
@@ -66,8 +75,37 @@ final class HubWebhookEnvelope
             accountId: self::text($accountId) ?? '',
             occurredAt: self::text($payload['occurred_at'] ?? null),
             data: is_array($data) ? $data : [],
-            causedByHub: ($payload['caused_by_hub'] ?? null) === true,
+            hubAuthored: ($payload['hub_authored'] ?? null) === true,
+            entityId: self::text($payload['entity_id'] ?? null),
+            action: HubWebhookAction::tryFromWire($payload['action'] ?? null),
+            hubLastWroteAt: self::text($payload['hub_last_wrote_at'] ?? null),
         );
+    }
+
+    /**
+     * Whether this delivery is the echo of your own write, landing within
+     * $seconds of it.
+     *
+     * Hub reports authorship and timing but draws no line itself, because the
+     * line belongs to the consumer: a change long after Hub's last write is a
+     * human editing in the provider's own UI, and that is a change you want to
+     * see. Anything this cannot establish reads as "not an echo" — the safe
+     * direction is to look at an event, not to drop it.
+     */
+    public function isOwnEcho(int $seconds = 300): bool
+    {
+        if (! $this->hubAuthored || $this->hubLastWroteAt === null || $this->occurredAt === null) {
+            return false;
+        }
+
+        $wroteAt = strtotime($this->hubLastWroteAt);
+        $occurredAt = strtotime($this->occurredAt);
+
+        if ($wroteAt === false || $occurredAt === false || $occurredAt < $wroteAt) {
+            return false;
+        }
+
+        return ($occurredAt - $wroteAt) <= $seconds;
     }
 
     /**
@@ -91,8 +129,20 @@ final class HubWebhookEnvelope
             'data' => $this->data,
         ];
 
-        if ($this->causedByHub) {
-            $payload['caused_by_hub'] = true;
+        if ($this->entityId !== null) {
+            $payload['entity_id'] = $this->entityId;
+        }
+
+        if ($this->action !== null) {
+            $payload['action'] = $this->action->value;
+        }
+
+        if ($this->hubAuthored) {
+            $payload['hub_authored'] = true;
+        }
+
+        if ($this->hubLastWroteAt !== null) {
+            $payload['hub_last_wrote_at'] = $this->hubLastWroteAt;
         }
 
         return $payload;
