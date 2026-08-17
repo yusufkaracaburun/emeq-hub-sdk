@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Tests;
 
 use Emeq\HubSdk\Backlog\Contracts\ProvidesBacklogSources;
+use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Tests\Doubles\FakeBacklogSources;
 use Emeq\HubSdk\Tests\Doubles\FixedAccountId;
@@ -33,6 +34,10 @@ abstract class BookingTestCase extends TestCase
 
         $migration = require __DIR__.'/../database/migrations/create_hub_documents_table.php.stub';
         $migration->up();
+
+        // The schema answer is cached for the process; the schema itself is
+        // rebuilt per test, and one of them drops the trace columns.
+        HubDocument::forgetTraceSupport();
 
         $this->createDocumentsTable();
     }

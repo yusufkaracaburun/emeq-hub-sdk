@@ -10,7 +10,9 @@ use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\CreateDocumentRequest;
 use Emeq\HubSdk\Testing\HubMock;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 
@@ -41,14 +43,19 @@ function booker(): DocumentBooker
     return app(DocumentBooker::class);
 }
 
-function hubError(string $error, int $status = 422, string $category = 'VALIDATION_ERROR', array $headers = []): MockResponse
+/**
+ * Leaves `retryable` out unless asked for it: a Hub that predates the field
+ * sends no opinion, and that is the path the code lists still cover.
+ */
+function hubError(string $error, int $status = 422, string $category = 'VALIDATION_ERROR', array $headers = [], ?bool $retryable = null): MockResponse
 {
-    return MockResponse::make([
+    return MockResponse::make(array_filter([
         'error' => $error,
         'message' => "Hub says {$error}.",
         'category' => $category,
+        'retryable' => $retryable,
         'request_id' => '01JZZ0000000000000000000RQ',
-    ], $status, $headers);
+    ], static fn (mixed $value): bool => $value !== null), $status, $headers);
 }
 
 afterEach(function (): void {
@@ -336,4 +343,83 @@ it('refuses a lock that would expire while the send is still in flight', functio
         ->toThrow(MissingConfigurationException::class);
 
     expect(HubDocument::query()->count())->toBe(0);
+});
+
+it('records which Hub request decided a failure', function (): void {
+    mockHub(hubError('mapping_failed'));
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_FAILED)
+        ->and($record->request_id)->toBe('01JZZ0000000000000000000RQ')
+        ->and($record->category)->toBe('VALIDATION_ERROR');
+});
+
+it('clears the trace once the document is booked', function (): void {
+    mockHub(hubError('mapping_failed'));
+    booker()->book(canonicalDocument());
+
+    mockHub(HubMock::createDocument());
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($record->request_id)->toBeNull()
+        ->and($record->category)->toBeNull();
+});
+
+it('leaves no trace on a failure Hub never answered', function (): void {
+    mockHub(hubError('mapping_failed'));
+    booker()->book(canonicalDocument());
+
+    mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument(), fn () => throw new RuntimeException('pdf stuk'));
+
+    expect($record->error)->toBe('attachment_render_failed')
+        ->and($record->request_id)->toBeNull()
+        ->and($record->category)->toBeNull();
+});
+
+it('waits when Hub says the answer is retryable, even for a code it has never seen', function (): void {
+    mockHub(hubError('some_new_lock', 409, 'CONFLICT', retryable: true));
+
+    expect(fn () => booker()->book(canonicalDocument()))
+        ->toThrow(BookingAlreadyInProgress::class);
+
+    expect(HubDocument::query()->count())->toBe(0);
+});
+
+it('reads rejection off the category once Hub has an opinion', function (): void {
+    mockHub(hubError('some_new_refusal', 422, 'PROVIDER_ERROR', retryable: false));
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_REJECTED)
+        ->and($record->error)->toBe('some_new_refusal');
+});
+
+it('keeps a fixable failure out of the rejected column', function (): void {
+    mockHub(hubError('mapping_failed', 422, 'REFERENCE_MAPPING_MISSING', retryable: false));
+
+    expect(booker()->book(canonicalDocument())->status)->toBe(HubDocument::STATUS_FAILED);
+});
+
+it('falls back to its own code list against a Hub that sends no opinion', function (): void {
+    mockHub(hubError('upstream_rejected'));
+
+    expect(booker()->book(canonicalDocument())->status)->toBe(HubDocument::STATUS_REJECTED);
+});
+
+it('books on against a ledger without the trace columns', function (): void {
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(HubDocument::TRACE_COLUMNS);
+    });
+    HubDocument::forgetTraceSupport();
+
+    mockHub(hubError('mapping_failed'));
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_FAILED)
+        ->and($record->error)->toBe('mapping_failed');
 });

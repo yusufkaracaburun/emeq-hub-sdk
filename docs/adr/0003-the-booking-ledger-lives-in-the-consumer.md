@@ -51,6 +51,13 @@ reads `hub.booking.connection`, which defaults to the consumer's default.
 - The ledger's schema is public API. Adding a column is a minor release with a
   new stub; consumers already on an older stub keep working because the model
   never selects columns explicitly.
+
+  Amended in 0.20.0: that held for reads only. A write to a column the consumer
+  has not migrated fails at the database, so the first optional columns
+  (`request_id`, `category`) arrived with `HubDocument::withoutMissingTrace()`,
+  which drops what the ledger cannot hold. Any later optional column does the
+  same. A column the package cannot work without is a different decision and
+  needs its own note here.
 - Consumers query the table directly for their own backlog. That is expected,
   and it is why the table name is stable and reachable through
   `(new HubDocument)->getTable()` rather than hard-coded.

@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
 test('publishes hub config and migrations', function () {
     $config = config_path('hub.php');
@@ -22,7 +24,40 @@ test('publishes hub config and migrations', function () {
         ->map(fn ($file) => $file->getFilename());
 
     expect($migrations->filter(fn (string $name) => str_contains($name, 'create_webhook_calls_table')))->not->toBeEmpty()
-        ->and($migrations->filter(fn (string $name) => str_contains($name, 'create_hub_documents_table')))->not->toBeEmpty();
+        ->and($migrations->filter(fn (string $name) => str_contains($name, 'create_hub_documents_table')))->not->toBeEmpty()
+        ->and($migrations->filter(fn (string $name) => str_contains($name, 'add_trace_to_hub_documents_table')))->not->toBeEmpty();
+});
+
+/**
+ * A first-time consumer publishes both stubs, so the second has to be a no-op
+ * against the table the first just created.
+ */
+test('the trace migration skips a ledger that already has the columns', function () {
+    $create = require __DIR__.'/../../database/migrations/create_hub_documents_table.php.stub';
+    $create->up();
+
+    $trace = require __DIR__.'/../../database/migrations/add_trace_to_hub_documents_table.php.stub';
+    $trace->up();
+
+    expect(Schema::hasColumns('hub_documents', ['request_id', 'category']))->toBeTrue();
+});
+
+/**
+ * And it does its actual job on a ledger created before the columns existed.
+ */
+test('the trace migration adds the columns to an older ledger', function () {
+    $create = require __DIR__.'/../../database/migrations/create_hub_documents_table.php.stub';
+    $create->up();
+
+    Schema::table('hub_documents', function (Blueprint $table): void {
+        $table->dropColumn(['request_id', 'category']);
+    });
+    expect(Schema::hasColumn('hub_documents', 'request_id'))->toBeFalse();
+
+    $trace = require __DIR__.'/../../database/migrations/add_trace_to_hub_documents_table.php.stub';
+    $trace->up();
+
+    expect(Schema::hasColumns('hub_documents', ['request_id', 'category']))->toBeTrue();
 });
 
 test('publishes the outcome copy so consumers can reword it', function () {

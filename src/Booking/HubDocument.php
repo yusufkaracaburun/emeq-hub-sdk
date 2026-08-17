@@ -7,6 +7,7 @@ namespace Emeq\HubSdk\Booking;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * What the bookkeeping did with one document.
@@ -28,6 +29,8 @@ use Illuminate\Support\Collection;
  * @property string|null $external_number
  * @property string|null $error
  * @property string|null $error_message
+ * @property string|null $request_id
+ * @property string|null $category
  * @property Carbon|null $booked_at
  * @property Carbon|null $accounting_changed_at
  * @property string|null $accounting_change_action
@@ -37,6 +40,17 @@ use Illuminate\Support\Collection;
  */
 class HubDocument extends Model
 {
+    /**
+     * What Hub called this failure, kept next to the row it decided.
+     *
+     * Optional on purpose: they arrive with a migration the consumer publishes
+     * when it suits them (ADR-0002), so everything here has to work without
+     * them. See {@see self::withoutMissingTrace()}.
+     *
+     * @var list<string>
+     */
+    public const TRACE_COLUMNS = ['request_id', 'category'];
+
     public const STATUS_POSTED = 'posted';
 
     public const STATUS_REJECTED = 'rejected';
@@ -58,6 +72,9 @@ class HubDocument extends Model
      */
     private const POSTED_FIRST = 'CASE WHEN status = ? THEN 0 ELSE 1 END';
 
+    /** @see self::tracesRequests() */
+    private static ?bool $tracesRequests = null;
+
     protected $table = 'hub_documents';
 
     /** @var list<string> */
@@ -71,6 +88,8 @@ class HubDocument extends Model
         'external_number',
         'error',
         'error_message',
+        'request_id',
+        'category',
         'booked_at',
         'accounting_changed_at',
         'accounting_change_action',
@@ -98,6 +117,50 @@ class HubDocument extends Model
         return is_string($connection) && $connection !== ''
             ? $connection
             : parent::getConnectionName();
+    }
+
+    /**
+     * The given attributes, minus the trace this ledger has no columns for.
+     *
+     * ADR-0003 says a consumer on an older stub keeps working, which held for
+     * reads — the model never selects columns explicitly — but not for writes: a
+     * fill of a column that is not there fails at the database. This closes that
+     * half, so publishing the trace migration stays the consumer's call and a
+     * booking never fails over a column that only exists to be looked at later.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    public static function withoutMissingTrace(array $attributes): array
+    {
+        if (self::tracesRequests()) {
+            return $attributes;
+        }
+
+        return array_diff_key($attributes, array_flip(self::TRACE_COLUMNS));
+    }
+
+    /**
+     * Whether this ledger carries the trace columns.
+     *
+     * Resolved once: the answer cannot change while the process runs, and this
+     * is a schema read on the booking path.
+     */
+    public static function tracesRequests(): bool
+    {
+        $model = new self;
+
+        return self::$tracesRequests ??= Schema::connection($model->getConnectionName())
+            ->hasColumns($model->getTable(), self::TRACE_COLUMNS);
+    }
+
+    /**
+     * Drops the cached schema answer. For tests that add or remove the columns
+     * within one process; nothing in an application changes its own schema.
+     */
+    public static function forgetTraceSupport(): void
+    {
+        self::$tracesRequests = null;
     }
 
     /**

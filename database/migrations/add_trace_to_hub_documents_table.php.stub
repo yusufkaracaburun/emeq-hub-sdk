@@ -1,0 +1,47 @@
+<?php
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Records which Hub request decided a booking.
+ *
+ * Only for ledgers created before these columns existed — a fresh
+ * `create_hub_documents_table` already carries them.
+ *
+ * Optional. Without it the package keeps booking and simply stores no trace;
+ * with it, a failed row names the Hub log line that explains it instead of
+ * leaving a search by timestamp across two systems.
+ *
+ * Publish this onto the same connection as `hub_documents` itself — the one
+ * named by `hub.booking.connection`.
+ */
+return new class extends Migration
+{
+    public function up()
+    {
+        // A consumer publishing for the first time gets both stubs, and the
+        // create already carries these columns. Skipping is the whole point:
+        // this migration exists for the ledgers that came before them.
+        if (Schema::hasColumn('hub_documents', 'request_id')) {
+            return;
+        }
+
+        Schema::table('hub_documents', function (Blueprint $table) {
+            $table->string('request_id')->nullable()->after('error_message');
+            $table->string('category')->nullable()->after('request_id');
+        });
+    }
+
+    public function down()
+    {
+        if (! Schema::hasColumn('hub_documents', 'request_id')) {
+            return;
+        }
+
+        Schema::table('hub_documents', function (Blueprint $table) {
+            $table->dropColumn(['request_id', 'category']);
+        });
+    }
+};

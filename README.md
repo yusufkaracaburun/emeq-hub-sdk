@@ -303,6 +303,22 @@ holds the documents it tracks — the backlog joins the two, so they cannot live
 on separate connections. A ledger on the wrong connection reads as "not booked
 yet", and the next run posts a duplicate into a real administration.
 
+### Tracing a failure back to Hub
+
+A failed row carries `request_id` and `category`: the value Hub logged the
+request under, and the provider-independent class of failure. Quote the
+`request_id` in a support question and the Hub side of the story is one lookup
+instead of a search by timestamp.
+
+`add_trace_to_hub_documents_table` adds both to a ledger created before 0.20.0;
+a fresh `create_hub_documents_table` already has them, and running both is safe.
+The migration is optional — without it booking works exactly as before and no
+trace is stored.
+
+The same values reach your log without any of that: `HubException::context()` is
+picked up by Laravel's exception handler, so every reported Hub failure carries
+`hub_request_id` on its own.
+
 Outcome copy ships in `en` and `nl`; `php artisan vendor:publish
 --tag=hub-translations` to reword it.
 

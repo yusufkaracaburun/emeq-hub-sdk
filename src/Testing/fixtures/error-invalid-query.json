@@ -2,5 +2,6 @@
     "error": "invalid_query",
     "message": "Query-parameter type is verplicht. Geldig: sales_invoice, purchase_invoice, income, expense, credit_note.",
     "category": "VALIDATION_ERROR",
+    "retryable": false,
     "request_id": "01JZZ0000000000000000000RQ"
 }
