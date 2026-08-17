@@ -28,3 +28,40 @@ it('reads accounting_changed_at as null for a document never reported changed', 
     expect($resolved['accounting_changed_at'])->toBeNull()
         ->and($resolved['accounting_change_action'])->toBeNull();
 });
+
+/**
+ * The trace has to reach a screen to be worth storing: a support question that
+ * quotes the request id turns the Hub side into one lookup.
+ */
+it('hands the frontend the value that ties a failure to a Hub log line', function (): void {
+    $record = HubDocument::query()->create([
+        'account_id' => 'tenant-1',
+        'type' => 'sales_invoice',
+        'external_id' => 'inv-9',
+        'status' => HubDocument::STATUS_FAILED,
+        'error' => 'mapping_failed',
+        'error_message' => "Grootboek-code '8000' niet in de mirror.",
+        'category' => 'REFERENCE_MAPPING_MISSING',
+        'request_id' => '01JZZ0000000000000000000RQ',
+    ]);
+
+    expect(BookingResource::maybe($record))
+        ->toMatchArray([
+            'request_id' => '01JZZ0000000000000000000RQ',
+            'category' => 'REFERENCE_MAPPING_MISSING',
+            'error' => 'mapping_failed',
+        ]);
+});
+
+it('reports no trace for a row decided before the columns existed', function (): void {
+    $record = HubDocument::query()->create([
+        'account_id' => 'tenant-1',
+        'type' => 'sales_invoice',
+        'external_id' => 'inv-10',
+        'status' => HubDocument::STATUS_FAILED,
+        'error' => 'mapping_failed',
+    ]);
+
+    expect(BookingResource::maybe($record))
+        ->toMatchArray(['request_id' => null, 'category' => null]);
+});

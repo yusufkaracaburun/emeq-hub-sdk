@@ -20,6 +20,12 @@ Nothing here requires a consumer to change code, and the migration is optional.
   **Optional**: without the migration the package books exactly as before and
   simply stores no trace. See `HubDocument::withoutMissingTrace()`.
 
+- **`request_id` and `category` on `BookingResource`**, and therefore inside
+  `BacklogDocumentResource`'s `booking` too. Storing the trace without exposing it
+  would move the search rather than end it — a support question needs to be able
+  to quote the value. `category` travels with it so a frontend can tell "the
+  connection is broken" from "this document is wrong" without knowing every code.
+
 - **`HubException::context()`.** Laravel's exception handler calls this and merges
   the result into the log record, so `hub_request_id`, `hub_error`,
   `hub_category` and `hub_status` reach your log or Sentry without configuring

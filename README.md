@@ -514,6 +514,12 @@ Fixtures are a snapshot, not a contract — they go stale when Hub changes.
 `tools/capture-fixtures.php` in this repository re-captures them; its write
 cases sit behind `--allow-write` because they book for real.
 
+**Re-capture before tagging a release.** Stale fixtures fail quietly: every test
+stays green against a Hub that has moved on. That is how `sync()` shipped having
+never worked — it surfaced only once real responses were captured. Alongside it,
+refresh the route coverage in
+[`docs/hub-api-coverage.md`](docs/hub-api-coverage.md) § Refreshing it.
+
 ### Testing inbound webhooks
 
 `Emeq\HubSdk\Testing\FakeHubWebhook` builds a signed envelope, so a consumer
