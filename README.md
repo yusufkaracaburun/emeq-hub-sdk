@@ -303,8 +303,39 @@ holds the documents it tracks — the backlog joins the two, so they cannot live
 on separate connections. A ledger on the wrong connection reads as "not booked
 yet", and the next run posts a duplicate into a real administration.
 
-Outcome copy ships in `en` and `nl`; `php artisan vendor:publish
---tag=hub-translations` to reword it.
+### Tracing a failure back to Hub
+
+A failed row carries `request_id` and `category`: the value Hub logged the
+request under, and the provider-independent class of failure. Quote the
+`request_id` in a support question and the Hub side of the story is one lookup
+instead of a search by timestamp.
+
+`add_trace_to_hub_documents_table` adds both to a ledger created before 0.20.0;
+a fresh `create_hub_documents_table` already has them, and running both is safe.
+The migration is optional — without it booking works exactly as before and no
+trace is stored.
+
+The same values reach your log without any of that: `HubException::context()` is
+picked up by Laravel's exception handler, so every reported Hub failure carries
+`hub_request_id` on its own.
+
+### Who writes the message a user sees
+
+Hub does, for anything Hub answered. Its messages name the relation or the
+ledger account that is missing and say what to do about it — `"Grootboek-code
+'8000' niet in de mirror — draai POST /v1/accounting/sync."` — which no line
+shipped here could. `BookingOutcome` passes them through unchanged, so a new
+error code reads correctly the day Hub deploys it: no SDK release, nothing for
+you to update.
+
+This package only writes copy for outcomes it decides alone — the bookkeeping
+was unreachable, a booking is already running, the attachment failed to render.
+Those ship in `en` and `nl`; `php artisan vendor:publish --tag=hub-translations`
+to reword them.
+
+Publishing an `error.<code>` key takes a code back: where the key exists it wins
+over Hub's message. Useful to soften one specific message for your users; do it
+per code, not wholesale, or you freeze copy that Hub keeps improving.
 
 ## Usage
 
@@ -483,6 +514,12 @@ Fixtures are a snapshot, not a contract — they go stale when Hub changes.
 `tools/capture-fixtures.php` in this repository re-captures them; its write
 cases sit behind `--allow-write` because they book for real.
 
+**Re-capture before tagging a release.** Stale fixtures fail quietly: every test
+stays green against a Hub that has moved on. That is how `sync()` shipped having
+never worked — it surfaced only once real responses were captured. Alongside it,
+refresh the route coverage in
+[`docs/hub-api-coverage.md`](docs/hub-api-coverage.md) § Refreshing it.
+
 ### Testing inbound webhooks
 
 `Emeq\HubSdk\Testing\FakeHubWebhook` builds a signed envelope, so a consumer
@@ -527,6 +564,8 @@ installs and configures the SDK against your tenant model:
 
 - [Hub API coverage](docs/hub-api-coverage.md) — which `/v1/*` endpoints this SDK
   wraps and which are still backlog, grouped by area
+- [Architecture boundaries](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/architecture-boundaries.md) — who owns what across Hub, this SDK and
+  your app, and the test that decides it: who has to act when this changes?
 - [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub admin + consumer invariants (B1–B4)
 - [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent prompts
 - Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api` — same spec committed as

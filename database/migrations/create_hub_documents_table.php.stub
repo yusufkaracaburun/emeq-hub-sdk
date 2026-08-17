@@ -35,6 +35,16 @@ return new class extends Migration
             $table->string('external_number')->nullable();
             $table->string('error')->nullable();
             $table->text('error_message')->nullable();
+
+            // What Hub called this failure. `request_id` is the value that ties
+            // this row to a line in Hub's own log, which is otherwise a search
+            // by timestamp across two systems; `category` is the
+            // provider-independent class of failure the envelope carries.
+            // Cleared on a posted row: a trace that outlives its outcome points
+            // somewhere unrelated.
+            $table->string('request_id')->nullable();
+            $table->string('category')->nullable();
+
             $table->timestamp('booked_at')->nullable();
 
             // Set from an accounting.*.changed webhook delivered after this

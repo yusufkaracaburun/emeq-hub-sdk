@@ -56,6 +56,21 @@ class DocumentBooker
      */
     protected const REJECTIONS = ['document_already_posted', 'idempotency_key_reuse', 'upstream_rejected'];
 
+    /**
+     * The failure classes that describe the document rather than its
+     * surroundings: a conflict with something already booked, or a functional
+     * refusal by the bookkeeping. A missing mapping or a revoked ability is
+     * neither — those the consumer can fix and send again.
+     *
+     * Only reachable for a decided answer: `retryable` outcomes leave before
+     * this, and Hub's 5xx becomes a {@see ServerException} earlier still, so the
+     * `PROVIDER_ERROR` that arrives here is always the 422 kind.
+     *
+     * The distinction is what the backlog shows, not whether anything resends —
+     * `rejected` and `failed` are both final.
+     */
+    protected const REJECTED_CATEGORIES = ['CONFLICT', 'PROVIDER_ERROR'];
+
     public function __construct(
         protected readonly Hub $hub,
         protected readonly ResolvesAccountId $account,
@@ -131,10 +146,15 @@ class DocumentBooker
             } catch (Throwable $e) {
                 report($e);
 
+                // No trace: this failed here, before Hub was asked anything. A
+                // request id left over from an earlier attempt would point at a
+                // Hub log line that has nothing to do with this outcome.
                 return $this->store($record, $document, [
                     'status' => HubDocument::STATUS_FAILED,
                     'error' => 'attachment_render_failed',
                     'error_message' => $e->getMessage(),
+                    'request_id' => null,
+                    'category' => null,
                 ]);
             }
 
@@ -148,11 +168,11 @@ class DocumentBooker
         } catch (RateLimitException|ServerException $e) {
             throw new BookingTemporarilyUnavailable($e->getMessage(), $e->retryAfter, $e);
         } catch (HubException $e) {
-            if (in_array($e->error, static::TRANSIENT_ERRORS, true)) {
+            if ($this->decidesNothing($e)) {
                 throw new BookingAlreadyInProgress($e->getMessage(), $e->retryAfter, $e);
             }
 
-            $isRejection = in_array($e->error, static::REJECTIONS, true);
+            $isRejection = $this->isRejection($e);
 
             if (! $isRejection) {
                 report($e);
@@ -162,6 +182,8 @@ class DocumentBooker
                 'status' => $isRejection ? HubDocument::STATUS_REJECTED : HubDocument::STATUS_FAILED,
                 'error' => $e->error,
                 'error_message' => $e->getMessage(),
+                'request_id' => $e->requestId,
+                'category' => $e->category,
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -178,6 +200,8 @@ class DocumentBooker
                 'status' => HubDocument::STATUS_UNKNOWN,
                 'error' => 'connection_interrupted',
                 'error_message' => $e->getMessage(),
+                'request_id' => null,
+                'category' => null,
             ]);
         }
 
@@ -188,7 +212,39 @@ class DocumentBooker
             'booked_at' => Carbon::now(),
             'error' => null,
             'error_message' => null,
+            'request_id' => null,
+            'category' => null,
         ]);
+    }
+
+    /**
+     * Whether Hub answered without deciding anything about this document, so the
+     * same request may go out again.
+     *
+     * Hub says so itself through `retryable`. The code list behind it is the
+     * fallback for a Hub that predates the field — and the reason the field
+     * exists: a list here ages the moment Hub adds a code, silently, in the
+     * direction of writing a permanent failure for a document nobody refused.
+     */
+    protected function decidesNothing(HubException $e): bool
+    {
+        return $e->retryable ?? in_array($e->error, static::TRANSIENT_ERRORS, true);
+    }
+
+    /**
+     * Whether this answer is about the document itself.
+     *
+     * Derived from the envelope's category so a code this release has never
+     * heard of still lands in the right column; the list is the fallback for a
+     * Hub that sends no `retryable`, and therefore no opinion at all.
+     */
+    protected function isRejection(HubException $e): bool
+    {
+        if ($e->retryable === null) {
+            return in_array($e->error, static::REJECTIONS, true);
+        }
+
+        return in_array($e->category, static::REJECTED_CATEGORIES, true);
     }
 
     /**
@@ -197,7 +253,7 @@ class DocumentBooker
      */
     protected function store(HubDocument $record, array $document, array $outcome): HubDocument
     {
-        $record->fill($outcome);
+        $record->fill(HubDocument::withoutMissingTrace($outcome));
 
         // Pin the relation key the first booking used: unlinking a party from
         // its parent record would otherwise send a different key and open a
@@ -240,14 +296,16 @@ class DocumentBooker
             return $winner;
         }
 
-        $winner->fill([
+        $winner->fill(HubDocument::withoutMissingTrace([
             'status' => HubDocument::STATUS_POSTED,
             'external_ref' => $mine->external_ref,
             'external_number' => $mine->external_number,
             'booked_at' => $mine->booked_at,
             'error' => null,
             'error_message' => null,
-        ])->save();
+            'request_id' => null,
+            'category' => null,
+        ]))->save();
 
         return $winner;
     }

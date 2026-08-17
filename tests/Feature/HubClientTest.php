@@ -231,3 +231,79 @@ it('maps unknown provider as not found when hub returns 404', function (): void 
     expect(fn () => app(Hub::class)->oauth()->init('nope', 'tenant-1'))
         ->toThrow(NotFoundException::class);
 });
+
+it('carries the field-level messages a rejected document came back with', function (): void {
+    $mock = new MockClient([
+        InitOAuthRequest::class => MockResponse::make([
+            'error' => 'validation_error',
+            'category' => 'VALIDATION_ERROR',
+            'retryable' => false,
+            'message' => 'The given data was invalid.',
+            'request_id' => 'req_3',
+            'errors' => [
+                'party.vat_number' => ['Geen geldig btw-nummer.'],
+                'lines.0.amount' => ['Bedrag is verplicht.', 'Bedrag moet numeriek zijn.'],
+            ],
+        ], 422),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    try {
+        app(Hub::class)->oauth()->init('exact', 'tenant-1');
+        $this->fail('Expected ValidationException');
+    } catch (ValidationException $e) {
+        expect($e->retryable)->toBeFalse()
+            ->and($e->validationErrors)->toBe([
+                'party.vat_number' => ['Geen geldig btw-nummer.'],
+                'lines.0.amount' => ['Bedrag is verplicht.', 'Bedrag moet numeriek zijn.'],
+            ]);
+    }
+});
+
+it('treats a Hub that never sent retryable as having no opinion', function (): void {
+    $mock = new MockClient([
+        InitOAuthRequest::class => MockResponse::make([
+            'error' => 'validation_error',
+            'category' => 'VALIDATION_ERROR',
+            'message' => 'Nope.',
+        ], 422),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    try {
+        app(Hub::class)->oauth()->init('exact', 'tenant-1');
+        $this->fail('Expected ValidationException');
+    } catch (ValidationException $e) {
+        expect($e->retryable)->toBeNull()
+            ->and($e->validationErrors)->toBe([]);
+    }
+});
+
+it('hands the consumer log the value that ties a failure to a Hub log line', function (): void {
+    $mock = new MockClient([
+        ListIntegrationsRequest::class => MockResponse::make([
+            'error' => 'unauthenticated',
+            'category' => 'AUTHENTICATION_ERROR',
+            'message' => 'Missing token',
+            'request_id' => 'req_4',
+        ], 401),
+    ]);
+
+    app(HubConnector::class)->withMockClient($mock);
+
+    try {
+        app(Hub::class)->integrations()->list();
+        $this->fail('Expected AuthenticationException');
+    } catch (HubException $e) {
+        // Laravel's handler calls context() and merges it into the log record,
+        // so this arrives without the consumer configuring anything.
+        expect($e->context())->toBe([
+            'hub_request_id' => 'req_4',
+            'hub_error' => 'unauthenticated',
+            'hub_category' => 'AUTHENTICATION_ERROR',
+            'hub_status' => 401,
+        ]);
+    }
+});

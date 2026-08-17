@@ -30,13 +30,34 @@ it('reports a refusal with Hub\'s own message, which names what is missing', fun
         ->and($outcome->message)->toBe('Ledger account 8000 does not exist.');
 });
 
-it('falls back to translated copy when Hub sent no message', function (): void {
+/**
+ * Reachable only for a row this package did not write — one it stores always
+ * carries Hub's message. The package therefore ships no copy per error code:
+ * Hub owns that, and says it better.
+ */
+it('falls back to the generic line when a row carries no message', function (): void {
     $outcome = BookingOutcome::from(ledgerRecord([
         'status' => HubDocument::STATUS_FAILED,
         'error' => 'provider_disabled',
     ]));
 
-    expect($outcome->message)->toBe('The connection to the bookkeeping is switched off.');
+    expect($outcome->message)->toBe('The bookkeeping returned an unknown error.');
+});
+
+it('lets a consumer take back a code by publishing a key for it', function (): void {
+    app('translator')->addLines(
+        ['booking.error.provider_disabled' => 'De koppeling staat uit.'],
+        'nl',
+        'hub',
+    );
+    app()->setLocale('nl');
+
+    $outcome = BookingOutcome::from(ledgerRecord([
+        'status' => HubDocument::STATUS_FAILED,
+        'error' => 'provider_disabled',
+    ]));
+
+    expect($outcome->message)->toBe('De koppeling staat uit.');
 });
 
 it('falls back to the generic line for an error code it does not know', function (): void {

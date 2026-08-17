@@ -15,9 +15,15 @@ use Illuminate\Support\Facades\Lang;
 final class BookingMessages
 {
     /**
-     * Copy for one of Hub's error codes, falling back to the generic line for
-     * a code this release does not know — Hub can add one without an SDK
-     * release, and an unlabelled failure is worse than a vague one.
+     * Copy for a row that carries an error code but no message.
+     *
+     * Only rows this package did not write get here: everything it stores keeps
+     * Hub's own message, which names the relation or ledger account a generic
+     * line cannot. Hub is therefore the single source for what a failure says,
+     * and a code it adds needs no release here.
+     *
+     * A consumer that publishes `hub-translations` and adds `error.<code>` takes
+     * that decision back for the codes it names — the key wins where it exists.
      */
     public static function forError(?string $error): string
     {

@@ -27,6 +27,9 @@ class HubServiceProvider extends PackageServiceProvider
             // Publish-only — do not auto-load (multi-DB consumers pick the connection).
             ->hasMigration('create_webhook_calls_table')
             ->hasMigration('create_hub_documents_table')
+            // Only bites on a ledger that predates the trace columns; a fresh
+            // create already has them, and neither is required to book.
+            ->hasMigration('add_trace_to_hub_documents_table')
             ->hasInstallCommand(function (InstallCommand $command): void {
                 $command
                     ->publishConfigFile()

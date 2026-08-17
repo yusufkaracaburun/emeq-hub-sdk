@@ -3,9 +3,15 @@
 declare(strict_types=1);
 
 /*
- * Copy voor de uitkomsten die dit package bepaalt. Alles wat het boekscherm van
- * een consumer zelf zegt blijft in diens eigen taalbestanden — publiceer
- * `hub-translations` om deze teksten te herschrijven.
+ * Copy voor de uitkomsten die dit package zélf bepaalt — de gevallen waarin Hub
+ * geen antwoord gaf om te tonen. Publiceer `hub-translations` om ze te
+ * herschrijven.
+ *
+ * Wat Hub wél beantwoordde, toont de SDK met Hubs eigen bericht. Dat noemt de
+ * relatie of de grootboekcode die ontbreekt, en zegt wat je eraan doet — een
+ * regel hier kan dat niet. Eén bron dus, en die staat in Hub: een nieuwe
+ * foutcode heeft daar meteen de goede tekst, zonder SDK-release en zonder dat
+ * één consumer iets hoeft te updaten.
  */
 
 return [
@@ -16,14 +22,8 @@ return [
     'already_in_progress' => 'Er loopt al een boeking van dit document. Wacht tot die klaar is.',
 
     'error' => [
-        'mapping_failed' => 'De boekhouding kent deze relatie of code nog niet.',
-        'upstream_rejected' => 'De boekhouding heeft dit document inhoudelijk geweigerd.',
-        'document_already_posted' => 'Dit document is al geboekt met een andere inhoud.',
-        'idempotency_key_reuse' => 'Deze sleutel hoort al bij een ander document.',
-        'insufficient_ability' => 'De koppeling mag niet boeken. Controleer de rechten van de koppeling.',
-        'provider_disabled' => 'De koppeling met de boekhouding staat uit.',
-        'connection_interrupted' => 'De verbinding met de boekhouding viel weg voordat er antwoord kwam. Controleer daar of het document geboekt is voordat je het opnieuw probeert.',
-        'attachment_render_failed' => 'De bijlage kon niet gemaakt worden, dus er is niets geboekt.',
+        // Laatste redmiddel voor een rij zonder bericht — een rij die dit
+        // package niet zelf schreef, want die draagt er altijd één.
         'unknown' => 'De boekhouding gaf een onbekende foutmelding.',
     ],
 
