@@ -25,6 +25,11 @@ final class PostedDocuments
      * $query->whereNotExists($this->posted->excluding('invoices.uuid'));
      * ```
      *
+     * A posted document the bookkeeping later changed is not excluded: it
+     * needs attention again, so it belongs back in the backlog.
+     * {@see BacklogRepository} decides from there whether to show it, through
+     * the `accounting_changed` filter.
+     *
      * @param  string  $uuidColumn  qualified column holding the document's external_id
      * @return Closure(Builder): void
      */
@@ -38,7 +43,8 @@ final class PostedDocuments
                 ->from($table)
                 ->whereColumn($table.'.external_id', $uuidColumn)
                 ->where($table.'.account_id', $accountId)
-                ->where($table.'.status', HubDocument::STATUS_POSTED);
+                ->where($table.'.status', HubDocument::STATUS_POSTED)
+                ->whereNull($table.'.accounting_changed_at');
         };
     }
 }

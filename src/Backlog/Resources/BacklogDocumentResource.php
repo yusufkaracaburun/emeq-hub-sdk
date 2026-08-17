@@ -9,6 +9,7 @@ use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Booking\Resources\BookingResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 use stdClass;
 
 /**
@@ -17,6 +18,10 @@ use stdClass;
  * `status` is the joined backlog state — always present, `not_booked` when no
  * attempt was decided. `booking` is the full ledger row and is null exactly
  * then. A frontend needs both: the first sorts and filters, the second explains.
+ *
+ * `accounting_changed_at` / `accounting_change_action` are joined the same way
+ * `status` is, so a row can render the "changed since booking" marker without
+ * reading into `booking`.
  */
 class BacklogDocumentResource extends JsonResource
 {
@@ -31,6 +36,7 @@ class BacklogDocumentResource extends JsonResource
     public function toArray(Request $request): array
     {
         $booking = $this->document->hub_document ?? null;
+        $accountingChangedAt = $this->document->accounting_changed_at ?? null;
 
         return [
             'module' => $this->document->module,
@@ -44,6 +50,8 @@ class BacklogDocumentResource extends JsonResource
             'document_status' => $this->document->document_status,
             'status' => $this->document->status,
             'booking' => BookingResource::maybe($booking instanceof HubDocument ? $booking : null),
+            'accounting_changed_at' => is_string($accountingChangedAt) ? Carbon::parse($accountingChangedAt)->toIso8601String() : null,
+            'accounting_change_action' => $this->document->accounting_change_action ?? null,
         ];
     }
 }

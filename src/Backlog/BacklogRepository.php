@@ -92,7 +92,15 @@ class BacklogRepository
             }
         }
 
-        return new BacklogSummary(array_sum($byStatus), $amountTotal, $byStatus, $byModule, $oldestDate);
+        // A sibling aggregate, not a widened groupBy(): a document counts here
+        // regardless of its status, so folding it into `by_status` would either
+        // double-count it or steal it from `posted`'s (absent) bucket.
+        $accountingChanged = (int) DB::query()
+            ->fromSub($this->filtered($params), 'backlog')
+            ->whereNotNull('accounting_changed_at')
+            ->count();
+
+        return new BacklogSummary(array_sum($byStatus), $amountTotal, $byStatus, $byModule, $oldestDate, $accountingChanged);
     }
 
     /**
@@ -152,6 +160,8 @@ class BacklogRepository
             ->select([
                 ...array_map(static fn (string $column): string => 'documents.'.$column, ProvidesBacklogSources::COLUMNS),
                 DB::raw("COALESCE(bookings.status, '".BacklogStatus::NOT_BOOKED."') as status"),
+                'bookings.accounting_changed_at',
+                'bookings.accounting_change_action',
             ]);
 
         if (is_string($params['search_term'] ?? null) && $params['search_term'] !== '') {
@@ -187,7 +197,24 @@ class BacklogRepository
             $documents->where('documents.amount', '<=', $maxAmount);
         }
 
+        if ($this->wantsAccountingChanged($params)) {
+            $documents->whereNotNull('bookings.accounting_changed_at');
+        }
+
         return $this->filterByStatus($documents, $this->requestedStatuses($params));
+    }
+
+    /**
+     * A changed document is `posted` *and* changed — orthogonal to
+     * {@see BacklogStatus}, not a value inside it, so it composes with
+     * whatever status filter the caller already applied instead of competing
+     * with it.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    protected function wantsAccountingChanged(array $params): bool
+    {
+        return filter_var($params['accounting_changed'] ?? false, FILTER_VALIDATE_BOOLEAN);
     }
 
     /**
@@ -233,7 +260,12 @@ class BacklogRepository
 
         return $connection->table($table)
             ->joinSub($latest, 'latest', 'latest.id', '=', $table.'.id')
-            ->select([$table.'.external_id', $table.'.status']);
+            ->select([
+                $table.'.external_id',
+                $table.'.status',
+                $table.'.accounting_changed_at',
+                $table.'.accounting_change_action',
+            ]);
     }
 
     /**

@@ -26,6 +26,7 @@ class BacklogSummaryResource extends JsonResource
             'by_status' => $this->summary->byStatus,
             'by_module' => $this->summary->byModule,
             'oldest_date' => $this->summary->oldestDate,
+            'accounting_changed' => $this->summary->accountingChanged,
         ];
     }
 }

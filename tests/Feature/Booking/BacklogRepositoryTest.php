@@ -155,6 +155,76 @@ it('sorts on the requested column and refuses anything else', function (): void 
         ->and($injected)->toHaveCount(2);
 });
 
+it('drops a posted, unchanged document from the backlog, same as before', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED);
+
+    expect(backlog()->paginate([])->items())->toHaveCount(0);
+});
+
+it('surfaces only the posted document the bookkeeping changed afterwards', function (): void {
+    document(['uuid' => 'inv-1']);
+    document(['uuid' => 'inv-2']);
+    booking('inv-1', HubDocument::STATUS_POSTED, [
+        'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
+        'accounting_change_action' => 'updated',
+    ]);
+    booking('inv-2', HubDocument::STATUS_POSTED);
+
+    $rows = backlog()->paginate(['accounting_changed' => 1])->items();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->uuid)->toBe('inv-1');
+});
+
+it('composes the accounting-changed filter with a status filter, not replacing it', function (): void {
+    document(['uuid' => 'inv-1']); // not_booked
+    document(['uuid' => 'inv-2']);
+    booking('inv-2', HubDocument::STATUS_POSTED, ['accounting_changed_at' => '2026-08-17T09:00:00+00:00']);
+
+    $onlyOpen = backlog()->paginate([
+        'status' => [BacklogStatus::NOT_BOOKED],
+        'accounting_changed' => 1,
+    ])->items();
+
+    expect($onlyOpen)->toHaveCount(0);
+});
+
+it('counts accounting-changed documents in the summary alongside by_status', function (): void {
+    document(['uuid' => 'inv-1']);
+    document(['uuid' => 'inv-2']);
+    booking('inv-2', HubDocument::STATUS_POSTED, ['accounting_changed_at' => '2026-08-17T09:00:00+00:00']);
+
+    $summary = backlog()->summary([]);
+
+    expect($summary->accountingChanged)->toBe(1)
+        ->and($summary->byStatus[BacklogStatus::NOT_BOOKED])->toBe(1);
+});
+
+it('exposes when and how the bookkeeping changed a document, on the row itself', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED, [
+        'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
+        'accounting_change_action' => 'updated',
+    ]);
+
+    $row = backlog()->paginate(['accounting_changed' => 1])->items()[0];
+    $resource = (new BacklogDocumentResource($row))->toArray(Request::create('/'));
+
+    expect($resource['accounting_changed_at'])->toBe('2026-08-17T09:00:00+00:00')
+        ->and($resource['accounting_change_action'])->toBe('updated');
+});
+
+it('reads accounting_changed_at as null for a document never reported changed', function (): void {
+    document(['uuid' => 'inv-1']);
+
+    $row = backlog()->paginate([])->items()[0];
+    $resource = (new BacklogDocumentResource($row))->toArray(Request::create('/'));
+
+    expect($resource['accounting_changed_at'])->toBeNull()
+        ->and($resource['accounting_change_action'])->toBeNull();
+});
+
 it('summarises the whole filter, not the page', function (): void {
     document(['uuid' => 'a', 'date' => '2026-03-01', 'amount' => 100.00]);
     document(['uuid' => 'b', 'date' => '2026-01-15', 'amount' => 50.00, 'module' => 'transaction']);
