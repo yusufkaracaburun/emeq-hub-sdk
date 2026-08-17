@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Emeq\HubSdk\Booking\HubDocument;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 function ledgerRow(array $attributes = []): HubDocument
 {
@@ -65,4 +67,26 @@ it('follows hub.booking.connection so the ledger cannot land on the wrong databa
     config()->set('hub.booking.connection', 'tenant');
 
     expect((new HubDocument)->getConnectionName())->toBe('tenant');
+});
+
+it('records that the bookkeeping changed a booked document afterwards', function (): void {
+    $record = ledgerRow([
+        'status' => HubDocument::STATUS_POSTED,
+        'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
+        'accounting_change_action' => 'updated',
+        'accounting_change_event_id' => 'sha256:abc123',
+    ]);
+
+    $fresh = $record->fresh();
+
+    expect($fresh->accounting_changed_at)->toBeInstanceOf(Carbon::class)
+        ->and($fresh->accounting_change_action)->toBe('updated')
+        ->and($fresh->accounting_change_event_id)->toBe('sha256:abc123');
+});
+
+it('indexes the lookup every accounting-change delivery performs', function (): void {
+    $indexed = collect(Schema::getIndexes('hub_documents'))
+        ->contains(fn (array $index): bool => $index['columns'] === ['account_id', 'external_ref']);
+
+    expect($indexed)->toBeTrue();
 });

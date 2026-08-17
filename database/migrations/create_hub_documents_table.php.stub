@@ -37,12 +37,23 @@ return new class extends Migration
             $table->text('error_message')->nullable();
             $table->timestamp('booked_at')->nullable();
 
+            // Set from an accounting.*.changed webhook delivered after this
+            // document was booked — the bookkeeper (or a hand-edit) changed
+            // it afterwards. accounting_change_event_id is a sha256 of the
+            // raw delivery body: Exact carries no notification id of its own,
+            // so Hub derives one.
+            $table->timestamp('accounting_changed_at')->nullable();
+            $table->string('accounting_change_action', 32)->nullable();
+            $table->string('accounting_change_event_id', 64)->nullable();
+
             $table->timestamps();
 
             $table->unique(['account_id', 'type', 'external_id'], 'hub_documents_identity_unique');
             // A document is looked up before its type is known: one invoice is a
             // sales_invoice or a credit_note depending on its total.
             $table->index('external_id');
+            // The lookup every accounting-change delivery performs.
+            $table->index(['account_id', 'external_ref']);
         });
     }
 

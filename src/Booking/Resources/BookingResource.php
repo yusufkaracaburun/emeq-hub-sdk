@@ -43,6 +43,8 @@ class BookingResource extends JsonResource
             'error_message' => $this->error_message,
             'booked_at' => $this->booked_at?->toIso8601String(),
             'attempted_at' => $this->updated_at?->toIso8601String(),
+            'accounting_changed_at' => $this->accounting_changed_at?->toIso8601String(),
+            'accounting_change_action' => $this->accounting_change_action,
         ];
     }
 }

@@ -29,6 +29,9 @@ use Illuminate\Support\Collection;
  * @property string|null $error
  * @property string|null $error_message
  * @property Carbon|null $booked_at
+ * @property Carbon|null $accounting_changed_at
+ * @property string|null $accounting_change_action
+ * @property string|null $accounting_change_event_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -69,6 +72,9 @@ class HubDocument extends Model
         'error',
         'error_message',
         'booked_at',
+        'accounting_changed_at',
+        'accounting_change_action',
+        'accounting_change_event_id',
     ];
 
     /** @var array<string, string> */
@@ -76,6 +82,7 @@ class HubDocument extends Model
         // Providers send the document number as an integer; it is a label, not a sum.
         'external_number' => 'string',
         'booked_at' => 'datetime',
+        'accounting_changed_at' => 'datetime',
     ];
 
     /**
