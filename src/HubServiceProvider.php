@@ -11,6 +11,7 @@ use Emeq\HubSdk\Webhooks\HubWebhookProfile;
 use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
 use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\Log;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -113,6 +114,37 @@ class HubServiceProvider extends PackageServiceProvider
             $configs[] = $entry;
         }
 
-        $config->set('webhook-client.configs', $configs);
+        $config->set('webhook-client.configs', $this->withoutUnprocessableEntries($configs));
+    }
+
+    /**
+     * Spatie's WebhookClientServiceProvider maps every config entry through
+     * `new WebhookConfig()`, which throws `InvalidConfig` on an empty
+     * `process_webhook_job` — exactly what Spatie's own default config ships
+     * when nothing overrides it, so a consumer who never published
+     * `webhook-client.php` 500s on the first delivery of any kind.
+     *
+     * @param  list<array<string, mixed>>  $configs
+     * @return list<array<string, mixed>>
+     */
+    private function withoutUnprocessableEntries(array $configs): array
+    {
+        $dropped = [];
+
+        $kept = array_values(array_filter($configs, function (array $entry) use (&$dropped): bool {
+            if (($entry['process_webhook_job'] ?? null) !== '') {
+                return true;
+            }
+
+            $dropped[] = is_string($entry['name'] ?? null) ? $entry['name'] : 'unnamed';
+
+            return false;
+        }));
+
+        if ($dropped !== []) {
+            Log::info('hub.webhook.dropped_unprocessable_config', ['names' => $dropped]);
+        }
+
+        return $kept;
     }
 }
