@@ -423,3 +423,18 @@ it('books on against a ledger without the trace columns', function (): void {
     expect($record->status)->toBe(HubDocument::STATUS_FAILED)
         ->and($record->error)->toBe('mapping_failed');
 });
+
+/**
+ * The reason this package ships no copy per Hub error code: a row it wrote
+ * always carries Hub's own message, which names the relation or ledger account
+ * that a generic sentence cannot. Even an error body with no `message` at all
+ * still lands the code, so the fallback never fires for these rows.
+ */
+it('always leaves a message on the row, so Hub keeps the last word', function (): void {
+    mockHub(MockResponse::make(['error' => 'mapping_failed', 'category' => 'REFERENCE_MAPPING_MISSING'], 422));
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->error_message)->toBe('mapping_failed')
+        ->and($record->error_message)->not->toBe('');
+});

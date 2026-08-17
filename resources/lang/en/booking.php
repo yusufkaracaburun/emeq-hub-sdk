@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 /*
- * Copy for the outcomes this package decides. Everything a consumer's own
- * booking screen says stays in the consumer's own lang files — publish
- * `hub-translations` to reword these.
+ * Copy for the outcomes this package decides itself — the cases where Hub gave
+ * no answer to show. Publish `hub-translations` to reword them.
+ *
+ * What Hub did answer is shown in Hub's own words. Those name the relation or
+ * the ledger account that is missing and say what to do about it, which a line
+ * here cannot. One source, and it is Hub: a new error code has the right text
+ * there immediately, with no SDK release and nothing for a consumer to update.
  */
 
 return [
@@ -16,14 +20,8 @@ return [
     'already_in_progress' => 'A booking of this document is already running. Wait for it to finish.',
 
     'error' => [
-        'mapping_failed' => 'The bookkeeping does not know this relation or code yet.',
-        'upstream_rejected' => 'The bookkeeping refused this document on its contents.',
-        'document_already_posted' => 'This document was already booked with different contents.',
-        'idempotency_key_reuse' => 'This key already belongs to another document.',
-        'insufficient_ability' => 'The connection is not allowed to book. Check its permissions.',
-        'provider_disabled' => 'The connection to the bookkeeping is switched off.',
-        'connection_interrupted' => 'The connection to the bookkeeping dropped before it answered. Check there whether the document was booked before retrying.',
-        'attachment_render_failed' => 'The attachment could not be produced, so nothing was booked.',
+        // Last resort for a row without a message — a row this package did not
+        // write, because those always carry one.
         'unknown' => 'The bookkeeping returned an unknown error.',
     ],
 

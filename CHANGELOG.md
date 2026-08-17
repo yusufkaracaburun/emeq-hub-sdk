@@ -34,6 +34,24 @@ Nothing here requires a consumer to change code, and the migration is optional.
   document now says which field it was instead of leaving you to guess from one
   sentence.
 
+### Removed
+
+- **The eight `booking.error.*` lines for Hub's own error codes**, leaving only
+  `error.unknown`. They were unreachable for any row this package writes:
+  `BookingOutcome::from()` prefers Hub's message, and Hub always sends one — the
+  code itself when nothing better exists. So they never rendered, and where they
+  would have, they were worse. Hub says `"Grootboek-code '8000' niet in de mirror
+  — draai POST /v1/accounting/sync."`; the line here said "the bookkeeping does
+  not know this relation or code yet".
+
+  Keeping copy for Hub's codes in a package also prices every wording change at
+  an SDK release plus an update per consumer, for a sentence Hub can already fix
+  by deploying. One source, and it is Hub.
+
+  **If you published `hub-translations`,** nothing changes: your file keeps its
+  keys and they still win. That is now the documented way to take one code back —
+  per code, not wholesale.
+
 ### Changed
 
 - **`DocumentBooker` asks Hub instead of consulting a list.** `TRANSIENT_ERRORS`

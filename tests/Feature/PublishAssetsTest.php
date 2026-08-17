@@ -61,8 +61,8 @@ test('the trace migration adds the columns to an older ledger', function () {
 });
 
 test('publishes the outcome copy so consumers can reword it', function () {
-    expect(trans('hub::booking.error.provider_disabled'))
-        ->toBe('The connection to the bookkeeping is switched off.');
+    expect(trans('hub::booking.temporarily_unavailable'))
+        ->toBe('The bookkeeping is briefly unreachable. Nothing was booked; try again shortly.');
 
     $this->artisan('vendor:publish', ['--tag' => 'hub-translations', '--force' => true])
         ->assertSuccessful();

@@ -319,8 +319,23 @@ The same values reach your log without any of that: `HubException::context()` is
 picked up by Laravel's exception handler, so every reported Hub failure carries
 `hub_request_id` on its own.
 
-Outcome copy ships in `en` and `nl`; `php artisan vendor:publish
---tag=hub-translations` to reword it.
+### Who writes the message a user sees
+
+Hub does, for anything Hub answered. Its messages name the relation or the
+ledger account that is missing and say what to do about it — `"Grootboek-code
+'8000' niet in de mirror — draai POST /v1/accounting/sync."` — which no line
+shipped here could. `BookingOutcome` passes them through unchanged, so a new
+error code reads correctly the day Hub deploys it: no SDK release, nothing for
+you to update.
+
+This package only writes copy for outcomes it decides alone — the bookkeeping
+was unreachable, a booking is already running, the attachment failed to render.
+Those ship in `en` and `nl`; `php artisan vendor:publish --tag=hub-translations`
+to reword them.
+
+Publishing an `error.<code>` key takes a code back: where the key exists it wins
+over Hub's message. Useful to soften one specific message for your users; do it
+per code, not wholesale, or you freeze copy that Hub keeps improving.
 
 ## Usage
 
