@@ -20,6 +20,11 @@ final class HubWebhookEnvelope
 {
     /**
      * @param  array<string, mixed>  $data
+     * @param  bool  $causedByHub  True when Hub has ever authored this entity —
+     *                             not when Hub caused this specific change. A
+     *                             human edit on a Hub-booked document still
+     *                             arrives flagged true. See "caused_by_hub"
+     *                             in docs/webhooks.md before branching on it.
      */
     public function __construct(
         public readonly HubWebhookEvent $event,

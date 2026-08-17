@@ -112,7 +112,12 @@ rather than cargo-culting empty profile/job subclasses:
 |---|---|
 | `HubWebhookReceived` | Every accepted envelope (before per-event hooks) |
 | `HubConnectionRevoked` | `connection.revoked` |
-| `HubWebhookIgnored` | Other canonical events (default: log only) |
+| `HubWebhookHandled` | An event your job's `handles()` claims |
+| `HubWebhookIgnored` | Any other canonical event (default: log only) |
+
+Override `handles(): array` on a `ProcessHubWebhookJob` subclass to name the
+`HubWebhookEvent` cases you act on, and `onEvent()` to act on them — cleaner
+than claiming an event inside `onIgnored()` before calling `parent::`.
 
 Wiring, multi-DB connection placement (**gets this wrong and it fails
 silently**), and deduplication: [`docs/webhooks.md`](docs/webhooks.md).
@@ -259,10 +264,22 @@ $summary = app(BacklogRepository::class)->summary($filters);   // whole filter, 
 ```
 
 Filters: `search_term`, `start_date`, `end_date`, `modules`, `status`,
-`direction`, `min_amount`, `max_amount`, `sort_by`, `order`, `page_length`.
-Validate `sort_by` / `direction` / `status` against `BacklogRepository::SORTS`,
-`::DIRECTIONS` and `BacklogStatus::all()`, and `page_length` against
-`::MAX_PAGE_LENGTH`.
+`direction`, `min_amount`, `max_amount`, `sort_by`, `order`, `page_length`,
+`accounting_changed`. Validate `sort_by` / `direction` / `status` against
+`BacklogRepository::SORTS`, `::DIRECTIONS` and `BacklogStatus::all()`, and
+`page_length` against `::MAX_PAGE_LENGTH`.
+
+A document the bookkeeping changed after this consumer booked it — an
+`accounting.*.changed` webhook naming a document already `posted` — belongs
+back in the backlog even though `PostedDocuments::excluding()` would otherwise
+drop it: `excluding()` only drops a posted document while
+`accounting_changed_at` is still null. `accounting_changed: true` filters to
+exactly those; it composes with `status` rather than replacing it (a changed
+document is `posted` *and* changed, not a `BacklogStatus` case), so pass it
+without a `status` filter to see them. The summary carries a matching
+`accounting_changed` count, a sibling of `by_status`, and every row exposes
+`accounting_changed_at` (ISO 8601) / `accounting_change_action` directly —
+no need to read into `booking` for the marker.
 
 ### Configuration
 
@@ -465,6 +482,32 @@ What the captures show, and what a hand-written mock tends to get wrong:
 Fixtures are a snapshot, not a contract — they go stale when Hub changes.
 `tools/capture-fixtures.php` in this repository re-captures them; its write
 cases sit behind `--allow-write` because they book for real.
+
+### Testing inbound webhooks
+
+`Emeq\HubSdk\Testing\FakeHubWebhook` builds a signed envelope, so a consumer
+test no longer hand-rolls `hash_hmac('sha256', $body, $secret)` next to an
+invented payload array:
+
+```php
+use Emeq\HubSdk\Testing\FakeHubWebhook;
+
+$fake = FakeHubWebhook::salesInvoiceChanged(accountId: '47');
+
+$this->postJson(
+    '/webhooks/emeq-hub',
+    json_decode($fake->body(), true),
+    $fake->headers(config('hub.webhook.secret')),
+)->assertOk();
+```
+
+`event()` builds any canonical event; `connectionRevoked()` and
+`salesInvoiceChanged()` are canned shortcuts for the two most-used ones.
+`body()` is the exact raw JSON that gets signed — decode it yourself rather
+than re-encoding, or the signature in `headers()` will not match what you
+post. `data` on the canned factories is illustrative: this package does not
+parse it, and Hub's real payload there is the provider's own webhook body,
+passed through unchanged.
 
 ## AI prompt — wire this SDK into your Laravel app
 

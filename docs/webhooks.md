@@ -35,8 +35,29 @@ exception, no failed job, no retry.
 
 ## Handlers
 
-Override `onConnectionRevoked()` / `onIgnored()` on a job subclass if you prefer
-hooks over the `Events\*` listeners.
+Override `handles(): array` to name the `HubWebhookEvent` cases you act on, and
+`onEvent()` to act on them — routed there instead of `onIgnored()`, and
+`HubWebhookHandled` is dispatched alongside it. `connection.revoked` always
+goes to `onConnectionRevoked()` regardless of `handles()`. Override
+`onIgnored()` only for events you deliberately do not claim.
+
+```php
+class BookkeepingWebhookJob extends ProcessHubWebhookJob
+{
+    protected function handles(): array
+    {
+        return [HubWebhookEvent::SALES_INVOICE_CHANGED];
+    }
+
+    protected function onEvent(HubWebhookEnvelope $envelope, ?string $eventId, ?string $requestId): void
+    {
+        // …
+    }
+}
+```
+
+A job that overrides neither method behaves exactly as before: every non-revoked
+event falls through to `onIgnored()`.
 
 `HubWebhookEvent` is a backed enum (keep in sync with Hub `CanonicalEvent`);
 `$envelope->event` is an enum case, and an event added by Hub after your SDK
@@ -47,22 +68,32 @@ if ($envelope->event === HubWebhookEvent::CONNECTION_REVOKED) { /* … */ }
 $wireValue = $envelope->event->value; // 'connection.revoked'
 ```
 
-## Changes you caused yourself
+## `caused_by_hub` marks an entity Hub has ever written, not this change
 
 Hub subscribes to bookkeeping topics it also writes to. Book an invoice and the
 bookkeeping package reports that change, so the notification travels back to the app
-that asked for it. `$envelope->causedByHub` is `true` for exactly those; the wire
-field `caused_by_hub` is present only then.
+that asked for it — `$envelope->causedByHub` exists to let a consumer recognise that
+echo. It does **not** mean what it sounds like.
+
+`causedByHub` is computed from whether a link record exists showing Hub authored
+this entity at some point, *ever* — not whether Hub wrote *this particular* change.
+Once Hub has booked a document, every later notification for that same document
+carries `caused_by_hub: true`, including a bookkeeper hand-editing it in the
+provider's own UI weeks afterwards. That edit is exactly the kind of external
+change a consumer needs to see, and the current flag hides it.
 
 ```php
 if ($envelope->causedByHub) {
-    return; // your own write, echoed back — writing again is a loop
+    // Only tells you Hub wrote this entity at some point — not that Hub wrote
+    // *this* change. Do not use this to decide whether to act on the event.
 }
 ```
 
-`false` means "not established", not "definitely the bookkeeper": Hub sets the flag
-only on positive evidence that it wrote the entity itself. Treat an unflagged event
-as a change worth acting on.
+There is currently no reliable way to tell your own write's echo apart from a
+later human correction on the same entity from the SDK alone. A Hub-side fix
+is proposed — a `hub_last_wrote_at` timestamp per entity, so a consumer could
+compare it against the delivery's `occurred_at` — but that field does not exist
+yet, and this SDK makes no assumption about its shape until it ships.
 
 ## Deduplication
 

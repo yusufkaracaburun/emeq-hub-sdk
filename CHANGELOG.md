@@ -1,5 +1,113 @@
 # Changelog
 
+## [0.18.0] — 2026-08-17
+
+`emeq/system` is the first consumer to wire up inbound webhooks end to end, and
+hit four gaps every future consumer would hit too. This release closes them.
+
+### Fixed
+
+- **The first inbound webhook 500s for any consumer that did not publish
+  `webhook-client.php`.** Spatie's `WebhookClientServiceProvider` merges in a
+  placeholder config entry (`['name' => 'default', 'process_webhook_job' => '',
+  …]`) and maps every entry through `new WebhookConfig()`, which throws
+  `InvalidConfig` on an empty `process_webhook_job` — precisely what that
+  placeholder carries. `HubServiceProvider::registerHubWebhookClientConfig()`
+  now drops every config entry whose `process_webhook_job` is an empty string
+  while it rewrites `webhook-client.configs`, and logs
+  `hub.webhook.dropped_unprocessable_config` with the names it dropped. Nothing
+  functional is lost: an entry in that state could never have processed a
+  webhook anyway.
+
+### Added
+
+- **`ProcessHubWebhookJob::handles()` / `onEvent()`.** Previously every event
+  other than `connection.revoked` routed to `onIgnored()`, so a consumer
+  acting on, say, `accounting.sales_invoice.changed` had to override
+  `onIgnored()` and claim the event before calling `parent::` — a naming lie,
+  and a listener-based consumer got `hub.webhook.ignored` logged for an event
+  it handled. Override `handles(): array` to name the `HubWebhookEvent` cases
+  you act on; `processEnvelope()` now routes those to `onEvent()` instead of
+  `onIgnored()`, and dispatches the new `HubWebhookHandled` event alongside it
+  — mirroring the existing `HubWebhookReceived` / `HubWebhookIgnored` pair.
+  `connection.revoked` still always goes to `onConnectionRevoked()`, regardless
+  of `handles()`. A job that overrides neither method behaves exactly as
+  before — `handles()` defaults to `[]`, so `onIgnored()` still gets everything.
+
+- **Accounting-change columns on `hub_documents`.** A consumer that books a
+  document and later receives an `accounting.*.changed` webhook for it now has
+  somewhere to record that the bookkeeping changed it afterwards:
+  `accounting_changed_at` (timestamp), `accounting_change_action` (string, 32)
+  and `accounting_change_event_id` (string, 64 — a sha256 of the raw delivery
+  body, since Exact carries no notification id of its own), all nullable, plus
+  an index on `['account_id', 'external_ref']` — the lookup every delivery
+  performs. These land directly in the published `create_hub_documents_table`
+  stub rather than a separate `add_` migration: `hub_documents` has not shipped
+  to production in any known consumer yet, so there is nothing to patch.
+
+  **If you already ran the previous version of this stub**, add the three
+  columns and the index yourself — this is not purely additive for you:
+
+  ```php
+  Schema::table('hub_documents', function (Blueprint $table): void {
+      $table->timestamp('accounting_changed_at')->nullable();
+      $table->string('accounting_change_action', 32)->nullable();
+      $table->string('accounting_change_event_id', 64)->nullable();
+      $table->index(['account_id', 'external_ref']);
+  });
+  ```
+
+  `HubDocument` carries the three columns in `$fillable`, with
+  `accounting_changed_at` cast to `datetime`. `Booking\Resources\BookingResource`
+  exposes `accounting_changed_at` (ISO 8601, nullable) and
+  `accounting_change_action`. `accounting_change_event_id` is not exposed — it
+  is a server-side correlation id, no screen reads it.
+
+- **`Emeq\HubSdk\Testing\FakeHubWebhook`.** `HubMock` covered 17 API responses
+  and zero webhooks, so every consumer hand-rolled
+  `hash_hmac('sha256', $body, $secret)` next to an invented envelope array —
+  knowledge this package already owned in `SpatieWebhookClientConfig`,
+  `HubWebhookHeaders` and `HubWebhookEnvelope::toArray()`.
+  `FakeHubWebhook::event()` builds any canonical event; `connectionRevoked()`
+  and `salesInvoiceChanged()` are canned shortcuts for the two most common
+  ones. `body()` is the exact raw JSON a consumer must sign; `headers($secret)`
+  returns `Signature` (HMAC-SHA256 over that body), `X-Emeq-Event-Id` and
+  `X-Emeq-Request-Id` — verified in this release's tests against the packaged
+  `DefaultSignatureValidator`, not just against its own formula. No JSON
+  fixture files: `Testing/fixtures/*.json` is reserved for responses captured
+  from a live Hub, and a webhook delivery is not one — see `CONTEXT.md`.
+
+- **The backlog surfaces a document the bookkeeping changed after it was
+  booked.** `PostedDocuments::excluding()` previously dropped every `posted`
+  document from a consumer's backlog source query unconditionally; it now
+  keeps one whose `accounting_changed_at` is set, because that document needs
+  attention again. Without this change nothing downstream could ever match —
+  the document was never in the query to begin with.
+
+  `BacklogRepository` gains an `accounting_changed` filter param (composes
+  with `status` rather than replacing it — a changed document is `posted`
+  *and* changed, not a new `BacklogStatus` case) and `summary()` gains an
+  `accounting_changed` count, a sibling of `by_status` rather than a widened
+  grouping (folding it in would either double-count the document or steal it
+  from a bucket `by_status` does not carry, since `posted` is not one of
+  {@see BacklogStatus::all()}'s cases). `BacklogSummary::$accountingChanged`
+  defaults to `0` for any code constructing it directly.
+  `BacklogDocumentResource` exposes `accounting_changed_at` (ISO 8601) and
+  `accounting_change_action` on the row itself, alongside the existing
+  `status` — a frontend does not have to read into `booking` for the marker.
+
+### Documentation
+
+- **`caused_by_hub` does not mean "Hub caused this change".** It is computed
+  from whether Hub has *ever* authored the entity, not whether Hub wrote *this*
+  delivery's change — verified against Hub's own `ExactEchoDetector`. A
+  bookkeeper hand-editing a Hub-booked invoice in the provider's UI weeks later
+  still arrives flagged `true`, and the previous wording in `docs/webhooks.md`
+  told consumers to drop exactly those events — the ones they most need to act
+  on. Rewritten to state the real semantics and note that a Hub-side fix
+  (`hub_last_wrote_at`) is proposed but unshipped; this SDK assumes nothing
+  about its shape yet.
+
 ## [0.17.0] — 2026-08-17
 
 Exact approved the App Center scope that had been blocking webhook registration, so
