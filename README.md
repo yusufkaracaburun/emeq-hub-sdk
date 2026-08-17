@@ -558,6 +558,8 @@ installs and configures the SDK against your tenant model:
 
 - [Hub API coverage](docs/hub-api-coverage.md) — which `/v1/*` endpoints this SDK
   wraps and which are still backlog, grouped by area
+- [Architecture boundaries](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/architecture-boundaries.md) — who owns what across Hub, this SDK and
+  your app, and the test that decides it: who has to act when this changes?
 - [Consumer onboarding](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-onboarding.md) — Hub admin + consumer invariants (B1–B4)
 - [Consumer integration guide](https://github.com/yusufkaracaburun/emeq-hub/blob/master/docs/consumer-integration-guide.md) — flows, payloads, accounting, webhooks, agent prompts
 - Hub OpenAPI UI: `{EMEQ_HUB_BASE}/docs/api` — same spec committed as
