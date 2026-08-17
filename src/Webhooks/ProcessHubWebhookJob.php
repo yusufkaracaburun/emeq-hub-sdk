@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Webhooks;
 
 use Emeq\HubSdk\Events\HubConnectionRevoked;
+use Emeq\HubSdk\Events\HubWebhookHandled;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
 use Exception;
@@ -259,7 +260,25 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             return;
         }
 
+        if (in_array($envelope->event, $this->handles(), true)) {
+            $this->onEvent($envelope, $eventId, $requestId);
+
+            return;
+        }
+
         $this->onIgnored($envelope, $eventId, $requestId);
+    }
+
+    /**
+     * Canonical events this job claims — routed to {@see onEvent()} instead
+     * of {@see onIgnored()}. `connection.revoked` always goes to
+     * {@see onConnectionRevoked()} regardless of what this returns.
+     *
+     * @return list<HubWebhookEvent>
+     */
+    protected function handles(): array
+    {
+        return [];
     }
 
     protected function onConnectionRevoked(
@@ -277,6 +296,27 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ]);
 
         event(new HubConnectionRevoked($envelope, $eventId, $requestId));
+    }
+
+    /**
+     * An event named in {@see handles()}. Override to act on it; the default
+     * only logs and dispatches {@see HubWebhookHandled}, so a consumer that
+     * prefers a listener over a subclass never has to override this either.
+     */
+    protected function onEvent(
+        HubWebhookEnvelope $envelope,
+        ?string $eventId,
+        ?string $requestId,
+    ): void {
+        Log::info('hub.webhook.handled', [
+            'event' => $envelope->event->value,
+            'provider' => $envelope->provider,
+            'account_id' => $envelope->accountId,
+            'request_id' => $requestId,
+            'event_id' => $eventId,
+        ]);
+
+        event(new HubWebhookHandled($envelope, $eventId, $requestId));
     }
 
     protected function onIgnored(

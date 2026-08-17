@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Emeq\HubSdk\Contracts\ResolvesWebhookAccount;
 use Emeq\HubSdk\Events\HubConnectionRevoked;
+use Emeq\HubSdk\Events\HubWebhookHandled;
 use Emeq\HubSdk\Events\HubWebhookIgnored;
 use Emeq\HubSdk\Events\HubWebhookReceived;
 use Emeq\HubSdk\Webhooks\HubWebhookDeduplicator;
@@ -140,6 +141,122 @@ test('job dispatches ignored for other events', function () {
     Event::assertDispatched(HubWebhookReceived::class);
     Event::assertDispatched(HubWebhookIgnored::class);
     Event::assertNotDispatched(HubConnectionRevoked::class);
+});
+
+test('a subclass that declares handles() routes those events to onEvent, not onIgnored', function () {
+    Event::fake([HubWebhookIgnored::class, HubWebhookHandled::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::SALES_INVOICE_CHANGED->value,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        protected function handles(): array
+        {
+            return [HubWebhookEvent::SALES_INVOICE_CHANGED];
+        }
+    };
+    $job->handle();
+
+    Event::assertDispatched(HubWebhookHandled::class);
+    Event::assertNotDispatched(HubWebhookIgnored::class);
+});
+
+test('an event outside handles() still falls through to onIgnored', function () {
+    Event::fake([HubWebhookIgnored::class, HubWebhookHandled::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::DOCUMENT_SYNCED->value,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        protected function handles(): array
+        {
+            return [HubWebhookEvent::SALES_INVOICE_CHANGED];
+        }
+    };
+    $job->handle();
+
+    Event::assertDispatched(HubWebhookIgnored::class);
+    Event::assertNotDispatched(HubWebhookHandled::class);
+});
+
+test('connection.revoked always wins over handles(), even if a subclass claims it', function () {
+    Event::fake([HubConnectionRevoked::class, HubWebhookHandled::class]);
+
+    $call = makeWebhookCall();
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        protected function handles(): array
+        {
+            return [HubWebhookEvent::CONNECTION_REVOKED];
+        }
+    };
+    $job->handle();
+
+    Event::assertDispatched(HubConnectionRevoked::class);
+    Event::assertNotDispatched(HubWebhookHandled::class);
+});
+
+test('onEvent defaults to logging and dispatching HubWebhookHandled', function () {
+    Log::spy();
+    Event::fake([HubWebhookHandled::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::SALES_INVOICE_CHANGED->value,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    $job = new class($call) extends ProcessHubWebhookJob
+    {
+        protected function handles(): array
+        {
+            return [HubWebhookEvent::SALES_INVOICE_CHANGED];
+        }
+    };
+    $job->handle();
+
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'hub.webhook.handled'
+            && $context['event'] === HubWebhookEvent::SALES_INVOICE_CHANGED->value)
+        ->once();
+});
+
+test('default handles() keeps every existing consumer routed to onIgnored, unchanged', function () {
+    // Backwards-compatibility: a job that overrides nothing must behave
+    // exactly as it did before handles()/onEvent() existed.
+    Event::fake([HubWebhookIgnored::class, HubWebhookHandled::class]);
+
+    $call = makeWebhookCall([
+        'payload' => [
+            'event' => HubWebhookEvent::SALES_INVOICE_CHANGED->value,
+            'provider' => 'exact',
+            'account_id' => '42',
+            'data' => [],
+        ],
+    ]);
+
+    (new ProcessHubWebhookJob($call))->handle();
+
+    Event::assertDispatched(HubWebhookIgnored::class);
+    Event::assertNotDispatched(HubWebhookHandled::class);
 });
 
 test('job deduplicates by event id', function () {
