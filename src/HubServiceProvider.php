@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk;
 
+use Emeq\HubSdk\Booking\AccountingChangeRecorder;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
+use Emeq\HubSdk\Events\HubWebhookReceived;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Support\HubRouteMiddleware;
 use Emeq\HubSdk\Webhooks\HubWebhookProfile;
 use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
 use Emeq\HubSdk\Webhooks\SpatieWebhookClientConfig;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
@@ -75,6 +78,7 @@ class HubServiceProvider extends PackageServiceProvider
     public function packageBooted(): void
     {
         $this->registerHubWebhookClientConfig();
+        $this->registerAccountingChangeRecorder();
 
         if (! (bool) config('hub.routes.enabled', false)) {
             return;
@@ -86,6 +90,34 @@ class HubServiceProvider extends PackageServiceProvider
         HubRouteMiddleware::validated();
 
         $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
+    }
+
+    /**
+     * Marks a booked document the bookkeeping changed afterwards.
+     *
+     * Wired as a listener rather than called from {@see ProcessHubWebhookJob}
+     * so a consumer that subclasses the job — every multi-DB one does — keeps
+     * the marker without remembering to call `parent::`, and so the webhook
+     * layer gains no dependency on the ledger. `HubWebhookReceived` fires for
+     * every accepted envelope after the account context is bound.
+     */
+    private function registerAccountingChangeRecorder(): void
+    {
+        /** @var Repository $config */
+        $config = $this->app->make('config');
+
+        if (! $config->boolean('hub.booking.record_accounting_changes', true)) {
+            return;
+        }
+
+        $echoWindow = $config->integer('hub.booking.echo_window_seconds', 300);
+
+        $this->app->bind(
+            AccountingChangeRecorder::class,
+            static fn (): AccountingChangeRecorder => new AccountingChangeRecorder($echoWindow),
+        );
+
+        Event::listen(HubWebhookReceived::class, [AccountingChangeRecorder::class, 'handle']);
     }
 
     private function registerHubWebhookClientConfig(): void

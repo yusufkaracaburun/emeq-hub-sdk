@@ -45,6 +45,12 @@ return [
     | The service provider upserts this entry into webhook-client.configs.
     | Multi-DB: override `job` / `profile` here — no separate Spatie publish.
     |
+    | `enabled` gates the endpoint through `HubWebhooksEnabled`, which you put
+    | on the route yourself. Default open, because that is what an endpoint you
+    | just registered already does. Set it to false to deploy the code before
+    | `webhook_calls` exists everywhere it has to: a delivery against a missing
+    | table 500s, and Hub retries a 5xx five times over roughly three hours.
+    |
     | `lock_store` names the cache store used to serialize concurrent
     | redeliveries of one event id. Null uses your default store, which must
     | support atomic locks: Laravel's `database` default needs the framework's
@@ -52,6 +58,7 @@ return [
     |
     */
     'webhook' => [
+        'enabled' => (bool) env('EMEQ_HUB_WEBHOOK_ENABLED', true),
         'secret' => env('EMEQ_HUB_WEBHOOK_SECRET', ''),
         'name' => 'emeq-hub',
         'profile' => HubWebhookProfile::class,
@@ -87,6 +94,17 @@ return [
     | `page_length` is the backlog's default page size when the caller names
     | none. BacklogRepository::MAX_PAGE_LENGTH is the ceiling either way.
     |
+    | `record_accounting_changes` marks a posted row when an `accounting.*`
+    | webhook reports the bookkeeping changed a document this app booked. That
+    | marker is what the backlog's `accounting_changed` filter reads, so leaving
+    | it off means the filter stays empty. Costs one indexed lookup per matching
+    | delivery; set it to false if you write the columns yourself.
+    |
+    | `echo_window_seconds` is how long after a booking a change still counts as
+    | the echo of that write rather than a human editing in the bookkeeping.
+    | Lower it and every booked document gets a marker seconds later; raise it
+    | and a genuine correction made just after booking goes unmarked.
+    |
     */
     'booking' => [
         'connection' => env('EMEQ_HUB_BOOKING_CONNECTION'),
@@ -94,6 +112,8 @@ return [
         'lock_seconds' => (int) env('EMEQ_HUB_BOOKING_LOCK_SECONDS', 40),
         'batch_seconds' => (int) env('EMEQ_HUB_BOOKING_BATCH_SECONDS', 60),
         'page_length' => (int) env('EMEQ_HUB_BOOKING_PAGE_LENGTH', 25),
+        'record_accounting_changes' => (bool) env('EMEQ_HUB_BOOKING_RECORD_ACCOUNTING_CHANGES', true),
+        'echo_window_seconds' => (int) env('EMEQ_HUB_BOOKING_ECHO_WINDOW_SECONDS', 300),
     ],
 
     /*

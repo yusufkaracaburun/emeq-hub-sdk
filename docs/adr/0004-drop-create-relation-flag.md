@@ -31,7 +31,8 @@ second relation stays.
 
 Surface `warnings[]` from the booking response on the result object. The Hub reports there what
 it did to the administration (`relation.created`, `relation.matched_by_name`,
-`relation.name_differs`); a consumer app that drops those leaves its user blind to a write in
+`relation.name_differs`, and `relation.relinked` since Hub 2026-08-18, when a mirrored relation
+turns out to be gone from the administration); a consumer app that drops those leaves its user blind to a write in
 their own bookkeeping. The checkbox went away, so the report must arrive.
 
 Carry the party contract through to the fake and the test helpers: `kind` (`company` |

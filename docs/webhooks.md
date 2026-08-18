@@ -11,7 +11,9 @@ Signing secret comes from `config('hub.webhook.secret')` (`EMEQ_HUB_WEBHOOK_SECR
 1. Publish `config/hub.php` (`hub:install` / `--tag=hub-config`) — defaults use
    `HubWebhookProfile` / `ProcessHubWebhookJob`.
 2. Bind `ResolvesWebhookAccount` (`account_id` → tenant; may switch DB).
-3. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except.
+3. `Route::webhooks('webhooks/emeq-hub', 'emeq-hub')` + CSRF except. Add
+   `->middleware(HubWebhooksEnabled::class)` if you want to be able to shut the
+   endpoint — see [Closing the endpoint](#closing-the-endpoint).
 4. `php artisan vendor:publish --tag=hub-migrations` then migrate on the webhook DB
    (tenant DB if multi-DB — see below).
 5. Multi-DB: set `hub.webhook.job` (and optionally `profile`) in `config/hub.php`
@@ -90,6 +92,12 @@ $row = HubDocument::query()
     ->first();
 ```
 
+For the one case that join is nearly always written for — marking a booked
+document the bookkeeping changed afterwards — you do not have to write it at
+all. `AccountingChangeRecorder` runs it as a listener on `HubWebhookReceived`,
+including the echo check below, and fills the `accounting_change_*` columns the
+backlog reads. See *The backlog* in the README.
+
 ## Telling your own echo apart from a human edit
 
 Hub subscribes to bookkeeping topics it also writes to. Book an invoice and the
@@ -141,3 +149,28 @@ The published `webhook_calls` migration carries a `['name', 'id']` index. It pay
 off when the table carries more than one webhook config (Hub alongside Stripe,
 Mollie, …); on a Hub-only table MySQL ignores it. If you migrated before 0.9.0
 and share `webhook_calls` across configs, add it yourself — see the changelog.
+
+## Closing the endpoint
+
+`hub.webhook.enabled` (`EMEQ_HUB_WEBHOOK_ENABLED`, default `true`) gates the
+route through `Emeq\HubSdk\Http\Middleware\HubWebhooksEnabled`:
+
+```php
+use Emeq\HubSdk\Http\Middleware\HubWebhooksEnabled;
+
+Route::webhooks('webhooks/emeq-hub', 'emeq-hub')
+    ->middleware(HubWebhooksEnabled::class);
+```
+
+It exists for the window in which the code is deployed but `webhook_calls` has
+not reached every database that has to hold it — every tenant DB, in a multi-DB
+app. With the endpoint open and the table missing, each delivery 500s and Hub
+retries a 5xx five times over roughly three hours.
+
+Gating in middleware rather than around `Route::webhooks()` keeps the route
+table identical in both states: flipping the flag needs no `route:cache`
+rebuild, and the closed state is reachable from a test.
+
+The default is open, because that is what a route you just registered already
+does. Set it to `false` before the deploy and to `true` once the migration has
+landed everywhere.
