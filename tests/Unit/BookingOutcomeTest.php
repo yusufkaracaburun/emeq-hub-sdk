@@ -18,6 +18,20 @@ it('reports a posted row as booked', function (): void {
         ->and($outcome->needsManualCheck)->toBeFalse();
 });
 
+it('carries the record\'s relation warnings on a booked outcome', function (): void {
+    $record = ledgerRecord(['status' => HubDocument::STATUS_POSTED]);
+    $record->warnings = [['code' => 'relation.created', 'message' => 'Relatie aangemaakt.', 'context' => []]];
+
+    $outcome = BookingOutcome::from($record);
+
+    expect($outcome->warnings)->toBe($record->warnings);
+});
+
+it('reports no warnings for an outcome that never booked', function (): void {
+    expect(BookingOutcome::unavailable()->warnings)->toBe([])
+        ->and(BookingOutcome::notFound()->warnings)->toBe([]);
+});
+
 it('reports a refusal with Hub\'s own message, which names what is missing', function (): void {
     $outcome = BookingOutcome::from(ledgerRecord([
         'status' => HubDocument::STATUS_REJECTED,

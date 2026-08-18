@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Emeq\HubSdk\Booking\BatchBookingResult;
 use Emeq\HubSdk\Booking\BookableDocument;
 use Emeq\HubSdk\Booking\BookingRunner;
 use Emeq\HubSdk\Booking\Contracts\ResolvesBookableDocument;
@@ -25,7 +26,7 @@ function sendable(array $overrides = [], ?Closure $attachments = null): Bookable
     return new BookableDocument(array_merge([
         'type' => 'sales_invoice',
         'external_id' => 'inv-1',
-        'party' => ['role' => 'debtor', 'name' => 'Acme'],
+        'party' => ['role' => 'debtor', 'kind' => 'company', 'name' => 'Acme', 'external_id' => 'party-acme'],
         'lines' => [['description' => 'Werk', 'amount' => 100.0, 'tax_rate' => 21.0]],
     ], $overrides), $attachments);
 }
@@ -76,6 +77,22 @@ it('books what it resolves and reads the ledger row back', function (): void {
         ->and($outcome->status)->toBe(200)
         ->and($outcome->record?->status)->toBe(HubDocument::STATUS_POSTED)
         ->and(HubDocument::query()->count())->toBe(1);
+});
+
+it('hands the caller what Hub reported about the relation, on the outcome and in the resource', function (): void {
+    app(HubConnector::class)->withMockClient(new MockClient([
+        CreateDocumentRequest::class => HubMock::createDocumentWithWarnings(),
+    ]));
+
+    $outcome = runner(['invoice:inv-1' => sendable()])->bookOne('invoice', 'inv-1');
+
+    expect($outcome->warnings)->toHaveCount(1)
+        ->and($outcome->warnings[0]['code'])->toBe('relation.matched_by_name');
+
+    $resource = (new BatchResultResource(new BatchBookingResult('invoice', 'inv-1', $outcome)))
+        ->toArray(Request::create('/'));
+
+    expect($resource['booking']['warnings'])->toBe($outcome->warnings);
 });
 
 it('answers 503 when nothing was decided, so the caller may retry', function (): void {

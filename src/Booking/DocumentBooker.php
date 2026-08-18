@@ -82,11 +82,10 @@ class DocumentBooker
      *                                                                     error handling: a renderer that throws
      *                                                                     records `attachment_render_failed`
      *                                                                     instead of losing the attempt
-     * @param  bool  $createRelation  let the bookkeeping create the party when it does not know it yet
      *
      * @throws BookingTemporarilyUnavailable when nothing was decided and the caller should retry
      */
-    public function book(array $document, ?Closure $attachments = null, bool $createRelation = false): HubDocument
+    public function book(array $document, ?Closure $attachments = null): HubDocument
     {
         $externalId = $this->externalId($document);
         $this->documentType($document);
@@ -96,7 +95,7 @@ class DocumentBooker
         // idempotency conflict, and holding a request worker for up to the
         // connector's own timeout would only trade one problem for another.
         $result = $this->lock($externalId)
-            ->get(fn (): HubDocument => $this->attemptBooking($document, $externalId, $attachments, $createRelation));
+            ->get(fn (): HubDocument => $this->attemptBooking($document, $externalId, $attachments));
 
         if (! $result instanceof HubDocument) {
             throw new BookingAlreadyInProgress(
@@ -115,7 +114,6 @@ class DocumentBooker
         array $document,
         string $externalId,
         ?Closure $attachments,
-        bool $createRelation,
     ): HubDocument {
         $record = HubDocument::forBooking($externalId, $this->account->accountId());
 
@@ -126,17 +124,9 @@ class DocumentBooker
             return $record;
         }
 
-        if ($record->party_external_id !== null || $createRelation) {
+        if ($record->party_external_id !== null) {
             $party = $this->party($document);
-
-            if ($record->party_external_id !== null) {
-                $party['external_id'] = $record->party_external_id;
-            }
-
-            if ($createRelation) {
-                $party['create_if_missing'] = true;
-            }
-
+            $party['external_id'] = $record->party_external_id;
             $document['party'] = $party;
         }
 
@@ -205,7 +195,7 @@ class DocumentBooker
             ]);
         }
 
-        return $this->store($record, $document, [
+        $record = $this->store($record, $document, [
             'status' => HubDocument::STATUS_POSTED,
             'external_ref' => $result['external_ref'] ?? null,
             'external_number' => $result['external_number'] ?? null,
@@ -215,6 +205,43 @@ class DocumentBooker
             'request_id' => null,
             'category' => null,
         ]);
+
+        // Not a column: only this attempt can report what Hub did to the
+        // relation, so it rides the record rather than the ledger row.
+        $record->warnings = self::parseWarnings($result['warnings'] ?? null);
+
+        return $record;
+    }
+
+    /**
+     * Hub's own report of what it did to the relation while booking. Untrusted
+     * JSON: a malformed entry is dropped rather than passed through as-is.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function parseWarnings(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $warnings = [];
+
+        foreach ($value as $warning) {
+            if (! is_array($warning) || ! is_string($warning['code'] ?? null) || ! is_string($warning['message'] ?? null)) {
+                continue;
+            }
+
+            $context = $warning['context'] ?? [];
+
+            $warnings[] = [
+                'code' => $warning['code'],
+                'message' => $warning['message'],
+                'context' => is_array($context) ? $context : [],
+            ];
+        }
+
+        return $warnings;
     }
 
     /**

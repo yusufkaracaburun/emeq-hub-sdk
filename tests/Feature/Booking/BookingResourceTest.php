@@ -65,3 +65,16 @@ it('reports no trace for a row decided before the columns existed', function ():
     expect(BookingResource::maybe($record))
         ->toMatchArray(['request_id' => null, 'category' => null]);
 });
+
+it('exposes what Hub reported about the relation on the attempt that booked it', function (): void {
+    $record = ledgerRow(['status' => HubDocument::STATUS_POSTED]);
+    $record->warnings = [['code' => 'relation.created', 'message' => 'Relatie aangemaakt.', 'context' => []]];
+
+    expect(BookingResource::maybe($record)['warnings'])->toBe($record->warnings);
+});
+
+it('reports no warnings for a row read back without a fresh attempt', function (): void {
+    $record = ledgerRow(['status' => HubDocument::STATUS_POSTED]);
+
+    expect(BookingResource::maybe($record->fresh())['warnings'])->toBe([]);
+});

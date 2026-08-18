@@ -105,6 +105,16 @@ class HubDocument extends Model
     ];
 
     /**
+     * What Hub reported this attempt did to the relation — `relation.created`,
+     * `relation.matched_by_name`, `relation.name_differs`. Not an Eloquent
+     * attribute: only the attempt that booked the document can report them, so
+     * a row read back later carries none rather than a stale answer.
+     *
+     * @var list<array<string, mixed>>
+     */
+    public array $warnings = [];
+
+    /**
      * Declares no connection of its own: a ledger read against the wrong
      * database answers "not booked yet", and the next run posts a duplicate
      * into a real administration. Consumers that keep the ledger off their

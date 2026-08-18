@@ -24,7 +24,7 @@ function canonicalDocument(array $overrides = []): array
         'number' => '2026-001',
         'currency' => 'EUR',
         'issue_date' => '2026-08-16',
-        'party' => ['role' => 'debtor', 'name' => 'Acme', 'external_id' => 'company-5'],
+        'party' => ['role' => 'debtor', 'kind' => 'company', 'name' => 'Acme', 'external_id' => 'company-5'],
         'lines' => [['description' => 'Werk', 'amount' => 100.0, 'tax_rate' => 21.0]],
     ], $overrides);
 }
@@ -189,21 +189,58 @@ it('keeps sending the relation key the first attempt used', function (): void {
 
     $mock = mockHub(HubMock::createDocument());
 
-    booker()->book(canonicalDocument(['party' => ['role' => 'debtor', 'name' => 'Acme', 'external_id' => 'customer-9']]));
+    booker()->book(canonicalDocument(['party' => ['role' => 'debtor', 'kind' => 'company', 'name' => 'Acme', 'external_id' => 'customer-9']]));
 
     $mock->assertSent(function (CreateDocumentRequest $request): bool {
         return $request->body()->all()['party']['external_id'] === 'company-5';
     });
 });
 
-it('asks the bookkeeping to create the relation only when told to', function (): void {
+it('sends the party as given — kind and external_id are the caller\'s to set', function (): void {
     $mock = mockHub(HubMock::createDocument());
 
-    booker()->book(canonicalDocument(), createRelation: true);
+    booker()->book(canonicalDocument());
 
     $mock->assertSent(function (CreateDocumentRequest $request): bool {
-        return $request->body()->all()['party']['create_if_missing'] === true;
+        $party = $request->body()->all()['party'];
+
+        return $party['kind'] === 'company' && $party['external_id'] === 'company-5';
     });
+});
+
+it('never sends create_if_missing — the Hub decides whether to create the relation', function (): void {
+    $mock = mockHub(HubMock::createDocument());
+
+    booker()->book(canonicalDocument());
+
+    $mock->assertSent(function (CreateDocumentRequest $request): bool {
+        return ! array_key_exists('create_if_missing', $request->body()->all()['party']);
+    });
+});
+
+it('carries what Hub reported about the relation on the posted record', function (): void {
+    mockHub(HubMock::createDocumentWithWarnings());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->warnings)->toBe([
+        [
+            'code' => 'relation.matched_by_name',
+            'message' => "Relatie 'Fixture Capture B.V.' is herkend op naam in plaats van KvK- of btw-nummer.",
+            'context' => [
+                'relation_id' => '77777777-7777-4777-8777-777777777777',
+                'matched_name' => 'Fixture Capture B.V.',
+            ],
+        ],
+    ]);
+});
+
+it('reports no warnings when Hub sends none', function (): void {
+    mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->warnings)->toBe([]);
 });
 
 it('refuses to queue behind a booking that is already running', function (): void {

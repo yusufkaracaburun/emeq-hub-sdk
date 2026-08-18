@@ -157,6 +157,7 @@ it('serves each factory from its own fixture, with the captured status', functio
         'suppliers' => [HubMock::suppliers(), 200],
         'bank-statements-empty' => [HubMock::bankStatements(), 200],
         'create-document' => [HubMock::createDocument(), 201],
+        'create-document-with-warnings' => [HubMock::createDocumentWithWarnings(), 201],
         'sync' => [HubMock::sync(), 200],
         'validate-clean' => [HubMock::validateDocument(), 200],
         'validate-findings' => [HubMock::validateDocument(valid: false), 200],

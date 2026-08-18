@@ -23,6 +23,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * `category` travels with it so a frontend can branch — "the connection is
  * broken" versus "this document is wrong" — without knowing every error code.
  *
+ * `warnings` reports what Hub did to the relation while booking — a checkbox
+ * used to ask permission for this, and now the report has to arrive instead.
+ * Empty on a row this consumer only just read back, not just-booked.
+ *
  * @mixin HubDocument
  */
 class BookingResource extends JsonResource
@@ -55,6 +59,7 @@ class BookingResource extends JsonResource
             'attempted_at' => $this->updated_at?->toIso8601String(),
             'accounting_changed_at' => $this->accounting_changed_at?->toIso8601String(),
             'accounting_change_action' => $this->accounting_change_action,
+            'warnings' => $this->warnings,
         ];
     }
 }
