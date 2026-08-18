@@ -23,6 +23,14 @@ class IntegrationController extends Controller
         private readonly ?ResolvesAccountId $accountIdResolver = null,
     ) {}
 
+    /**
+     * List the integrations this account can connect.
+     *
+     * Answers `list<array<string, mixed>>`, the same shape `Integrations::list()`
+     * declares. Item keys stay untyped on purpose: Hub's discovery payload is
+     * data-driven per provider, and narrowing keys here would mean hard-coding
+     * a schema ADR-0001 deliberately keeps out of the SDK.
+     */
     public function index(): JsonResponse
     {
         try {
@@ -34,6 +42,14 @@ class IntegrationController extends Controller
         }
     }
 
+    /**
+     * Mint Hub's hosted connect handoff page URL.
+     *
+     * Deliberately reads no input from the request body or query: the account
+     * comes from ResolvesAccountId and the return path from config. The request
+     * is here for the app's own scheme + host, nothing else — which is why
+     * there is no FormRequest.
+     */
     public function connectSession(Request $request): JsonResponse
     {
         try {
@@ -55,6 +71,10 @@ class IntegrationController extends Controller
     }
 
     /**
+     * Hub's response is untrusted JSON, narrowed the same way `returnPath()`
+     * narrows config — a non-string value reads as absent rather than
+     * widening the generated OpenAPI schema (and consumer TypeScript) to `any`.
+     *
      * @param  array<string, mixed>  $session
      * @return array{url: string|null, expires_at: string|null}
      */

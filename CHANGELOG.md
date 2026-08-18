@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.24.1] — 2026-08-18
+
+### Fixed
+
+- **The two route actions carry their docblocks again.** `7f7fbc3` stripped
+  prose from the package and took `IntegrationController::index()` and
+  `connectSession()` with it. Those were not comments for a reader of this
+  package: `emeq/system` generates its OpenAPI document from its route handlers,
+  these two included, and reads the first docblock line as `summary` and the
+  rest as `description`. Both endpoints published with neither until now — a
+  loss that only surfaced when that consumer upgraded to 0.24.0 and its
+  pre-commit hook regenerated the file.
+
+  The docblock on `connectSessionResponse()` is back for the same reason: it
+  records why the response is narrowed to `string|null`, which is what keeps the
+  generated schema and the consumer's TypeScript off `any`.
+
+  `.ai/rules/comments.md` now names this carve-out next to the one it already
+  made for `config/hub.php` — both are files whose comments are read by someone
+  outside this repository.
+
 ## [0.24.0] — 2026-08-18
 
 A hardening round. Nothing new to build with — the same calls, closer to what
