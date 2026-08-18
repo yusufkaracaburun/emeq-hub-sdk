@@ -8,13 +8,7 @@ use Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest;
 
 class ConnectSessions extends Resource
 {
-    /**
-     * Mint Hub's hosted connect handoff URL (`/connect/{account}`).
-     *
-     * Hub's response is not validated here — read keys defensively.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function create(
         ?string $accountExternalId = null,
         ?string $displayName = null,

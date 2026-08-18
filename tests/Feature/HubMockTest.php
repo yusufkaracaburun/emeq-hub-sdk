@@ -12,17 +12,13 @@ use Emeq\HubSdk\Testing\HubMock;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 
-// No ResolvesAccountId is bound in the package test app, so every accounting
-// call passes its account explicitly.
 const ACCOUNT = 'tenant-1';
 
 afterEach(function (): void {
     MockClient::destroyGlobal();
 });
 
-/**
- * @return array<string, mixed>
- */
+/** @return array<string, mixed> */
 function mockedBody(MockResponse $response): array
 {
     /** @var array<string, mixed> $decoded */
@@ -49,12 +45,10 @@ it('serves collection reads as pages that keep their cursor', function (): void 
 
     $accounting = app(Hub::class)->accounting();
 
-    // Captured against a provider with more ledger accounts than one page.
     $ledger = $accounting->ledgerAccounts([], ACCOUNT);
     expect($ledger->hasMore())->toBeTrue()
         ->and($ledger->nextCursor)->toBe(HubMock::fixture('ledger-accounts')['next_cursor']);
 
-    // Captured on an administration whose relations fit in a single page.
     expect($accounting->customers([], ACCOUNT)->hasMore())->toBeFalse()
         ->and($accounting->suppliers([], ACCOUNT)->items)->toBe(HubMock::fixture('suppliers')['data'])
         ->and($accounting->bankStatements([], ACCOUNT)->items)->toBe([]);
@@ -65,8 +59,6 @@ it('distinguishes a clean validation from one with findings', function (): void 
 
     $clean = app(Hub::class)->accounting()->validateDocument(['type' => 'sales_invoice'], ACCOUNT);
 
-    // A clean document still carries findings — Hub reports the matched
-    // relation as `info`. Consumers must read `valid`, not `findings === []`.
     expect($clean['valid'])->toBeTrue()
         ->and($clean['findings'])->not->toBe([])
         ->and($clean['summary']['errors'])->toBe(0);
@@ -87,9 +79,6 @@ it('carries the blocking flag Hub decides, not one derived from severity', funct
         $blocking[$finding['code']] = Finding::isBlocking($finding);
     }
 
-    // Captured live: `exact.vat_code.unmapped` is a `warning` that refuses the
-    // booking anyway, and `exact.relation.new` is an `info` that does not.
-    // Severity does not answer this question; `blocking` does.
     expect($blocking['exact.vat_code.unmapped'])->toBeTrue()
         ->and($blocking['exact.relation.new'])->toBeFalse()
         ->and($failing['summary']['blocking'])->toBe(2);
@@ -106,8 +95,6 @@ it('books a document and replays the same key onto the same booking', function (
         accountId: ACCOUNT,
     );
 
-    // Captured live: a retry carrying the same key answers with the same
-    // provider reference, so the document is booked once.
     $replayed = app(Hub::class)->accounting()->createDocument(
         $document,
         idempotencyKey: $document['external_id'],
@@ -120,10 +107,6 @@ it('books a document and replays the same key onto the same booking', function (
 });
 
 it('answers a booking with the list read when the map has no room for both', function (): void {
-    // Saloon keys mocks on the URL alone, and POST /accounting/documents shares
-    // its URL with the list read. accounting() answers the read, so a test that
-    // books has to key that URL itself — this pins the trap so the docblock
-    // saying so cannot quietly stop being true.
     MockClient::global(HubMock::accounting());
 
     $booked = app(Hub::class)->accounting()->createDocument(
@@ -147,8 +130,6 @@ it('maps the captured error envelopes to the documented exceptions', function ()
     $cases = [
         [HubMock::unauthenticated(), AuthenticationException::class],
         [HubMock::notFound(), NotFoundException::class],
-        // 400 + VALIDATION_ERROR: the answer to a collection read without its
-        // required filter. Category decides here, not the status.
         [HubMock::invalidQuery(), ValidationException::class],
     ];
 
@@ -161,9 +142,6 @@ it('maps the captured error envelopes to the documented exceptions', function ()
 });
 
 it('serves each factory from its own fixture, with the captured status', function (): void {
-    // Comparing a factory's body to the fixture it loads would be circular. What
-    // can actually break: a factory pointing at the wrong file, two factories
-    // sharing one, or a status that drifts from what Hub really answered.
     $factories = [
         'capabilities' => [HubMock::capabilities(), 200],
         'reference-data' => [HubMock::referenceData(), 200],
@@ -193,8 +171,6 @@ it('serves each factory from its own fixture, with the captured status', functio
         $served[] = $fixture;
     }
 
-    // Every shipped file is reachable, so a renamed or abandoned fixture shows
-    // up here instead of rotting unused next to the ones that are live.
     $shipped = array_map(
         fn (string $path): string => basename($path, '.json'),
         (array) glob(dirname((new ReflectionClass(HubMock::class))->getFileName()).'/fixtures/*.json'),

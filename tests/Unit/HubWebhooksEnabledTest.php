@@ -29,8 +29,6 @@ test('a closed endpoint is indistinguishable from one that was never registered'
 });
 
 test('an endpoint nobody configured is open — registering the route is the decision', function () {
-    // A consumer on a config/hub.php published before this key existed: the
-    // key is absent, not false.
     config()->set('hub.webhook', Arr::except((array) config('hub.webhook'), 'enabled'));
 
     $response = (new HubWebhooksEnabled)->handle(Request::create('/webhooks/emeq-hub', 'POST'), passThrough());

@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Booking;
 
-/**
- * What a caller should tell the user, and with which HTTP status.
- *
- * Separates the three ways a booking can not happen: refused (the document is
- * wrong — 422), unavailable (nothing was decided, retry — 503) and upstream
- * failure (Hub answered an error — 502). Only `unavailable` may be retried
- * blindly; see {@see self::mayRetry()}.
- */
 class BookingOutcome
 {
     /**
@@ -29,13 +21,6 @@ class BookingOutcome
         public readonly array $warnings = [],
     ) {}
 
-    /**
-     * The outcome a decided ledger row describes.
-     *
-     * Prefers Hub's own message over the translated copy: it names the ledger
-     * account or relation the bookkeeping is missing, which the generic phrase
-     * cannot.
-     */
     public static function from(HubDocument $record): static
     {
         if ($record->status === HubDocument::STATUS_UNKNOWN) {
@@ -59,34 +44,16 @@ class BookingOutcome
         return new static(false, 422, $message, $record);
     }
 
-    /**
-     * The send was interrupted: the document may or may not be in the
-     * bookkeeping. Reported as a refusal so nothing resends it automatically,
-     * flagged so a human goes and looks.
-     */
     public static function unknown(HubDocument $record, string $message): static
     {
         return new static(false, 422, $message, $record, needsManualCheck: true);
     }
 
-    /**
-     * The bookkeeping said nothing usable. `$reason` carries the exception text
-     * for the consumer's log; the screen gets the translated line, because the
-     * exception names an external id and speaks English.
-     *
-     * `$retryAfter` is how long Hub asked the caller to wait, when it said so.
-     * A queued retry should honour it; see {@see self::mayRetry()}.
-     */
     public static function unavailable(?string $reason = null, ?int $retryAfter = null): static
     {
         return new static(false, 503, BookingMessages::line('temporarily_unavailable'), null, reason: $reason, retryAfter: $retryAfter);
     }
 
-    /**
-     * The same document is already on its way — wait for that run rather than
-     * go and look at the bookkeeping. Retryable like any other 503, but the
-     * user is told which of the two waits they are in.
-     */
     public static function alreadyInProgress(?string $reason = null, ?int $retryAfter = null): static
     {
         return new static(false, 503, BookingMessages::line('already_in_progress'), null, reason: $reason, retryAfter: $retryAfter);

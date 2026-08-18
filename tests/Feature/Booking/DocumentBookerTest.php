@@ -43,10 +43,6 @@ function booker(): DocumentBooker
     return app(DocumentBooker::class);
 }
 
-/**
- * Leaves `retryable` out unless asked for it: a Hub that predates the field
- * sends no opinion, and that is the path the code lists still cover.
- */
 function hubError(string $error, int $status = 422, string $category = 'VALIDATION_ERROR', array $headers = [], ?bool $retryable = null): MockResponse
 {
     return MockResponse::make(array_filter([
@@ -320,8 +316,6 @@ it('offers an interrupted document again and settles it on Hub\'s replay', funct
 });
 
 it('keeps the posted answer when a second attempt lost the race to the ledger', function (): void {
-    // The lock stopped covering the send, so another attempt decided this same
-    // document while this one was on the wire and inserted its row first.
     $mock = new MockClient([
         CreateDocumentRequest::class => function () {
             HubDocument::query()->create([
@@ -461,12 +455,6 @@ it('books on against a ledger without the trace columns', function (): void {
         ->and($record->error)->toBe('mapping_failed');
 });
 
-/**
- * The reason this package ships no copy per Hub error code: a row it wrote
- * always carries Hub's own message, which names the relation or ledger account
- * that a generic sentence cannot. Even an error body with no `message` at all
- * still lands the code, so the fallback never fires for these rows.
- */
 it('always leaves a message on the row, so Hub keeps the last word', function (): void {
     mockHub(MockResponse::make(['error' => 'mapping_failed', 'category' => 'REFERENCE_MAPPING_MISSING'], 422));
 

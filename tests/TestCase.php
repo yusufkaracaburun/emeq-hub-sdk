@@ -21,9 +21,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('hub.base_url', 'https://hub.example.test');
         $app['config']->set('hub.pat', 'test-pat-token');
         $app['config']->set('hub.timeout', 10);
-        // Lock-capable store without the framework's cache_locks table.
         $app['config']->set('cache.default', 'array');
-        // Opt-in BFF routes off by default in unit tests; enable in RoutesEnabledTestCase.
         $app['config']->set('hub.routes.enabled', false);
     }
 }

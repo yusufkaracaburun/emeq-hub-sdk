@@ -4,12 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Backlog;
 
-/**
- * What the current backlog filter has in front of the bookkeeper.
- *
- * Counted over the whole filtered set, not over the current page — the point of
- * a summary is what paging hides.
- */
 final class BacklogSummary
 {
     /**

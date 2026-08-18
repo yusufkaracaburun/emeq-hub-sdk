@@ -12,12 +12,6 @@ use Saloon\Http\Connector;
 use Saloon\Http\Response;
 use Throwable;
 
-/**
- * Single Saloon connector for Hub /v1. Provider-agnostic — partner growth
- * happens on the Hub; this client stays on the canonical surface.
- *
- * @internal Prefer Facades\Hub / Resources from app code.
- */
 class HubConnector extends Connector
 {
     public function __construct(
@@ -63,10 +57,6 @@ class HubConnector extends Connector
         ];
     }
 
-    /**
-     * Reached only via $response->throw() on the public connector() escape hatch —
-     * MapHubErrors throws first on the normal send() path.
-     */
     public function getRequestException(Response $response, ?Throwable $senderException): ?Throwable
     {
         return HubErrorResponse::toException($response, $senderException);

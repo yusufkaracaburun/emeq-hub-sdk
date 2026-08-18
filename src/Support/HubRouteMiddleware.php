@@ -6,17 +6,9 @@ namespace Emeq\HubSdk\Support;
 
 use InvalidArgumentException;
 
-/**
- * Normalizes and validates hub.routes.middleware for the opt-in BFF.
- */
 final class HubRouteMiddleware
 {
-    /**
-     * The configured stack, normalized and checked. The only way to obtain the
-     * list, so a caller cannot apply middleware nobody asserted on.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function validated(): array
     {
         $middleware = self::normalize(config('hub.routes.middleware'));
@@ -30,9 +22,7 @@ final class HubRouteMiddleware
         return $middleware;
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function normalize(mixed $middleware): array
     {
         if (! is_array($middleware)) {
@@ -50,9 +40,7 @@ final class HubRouteMiddleware
         ));
     }
 
-    /**
-     * @param  list<string>  $middleware
-     */
+    /** @param  list<string>  $middleware */
     public static function assertNotEmpty(array $middleware): void
     {
         if ($middleware === []) {
@@ -62,15 +50,7 @@ final class HubRouteMiddleware
         }
     }
 
-    /**
-     * The BFF mints Hub connect-session URLs for whatever ResolvesAccountId
-     * returns, so an unauthenticated POST hands a partner OAuth handoff to
-     * anyone. Middleware named outside the `auth` family (`tenant.auth`,
-     * a Sanctum wrapper) is invisible here — set
-     * `hub.routes.allow_unauthenticated` to declare it deliberate.
-     *
-     * @param  list<string>  $middleware
-     */
+    /** @param  list<string>  $middleware */
     public static function assertAuthenticated(array $middleware): void
     {
         foreach ($middleware as $entry) {
@@ -86,16 +66,6 @@ final class HubRouteMiddleware
         );
     }
 
-    /**
-     * Matched case-sensitively because Laravel resolves aliases by exact array
-     * key: `AUTH:SANCTUM` never reaches the auth middleware, it is passed
-     * through as a class name. Accepting it would pass a stack that has no
-     * working auth — the failure this guard exists to stop.
-     *
-     * `auth.session` is excluded for the same reason: it aliases
-     * AuthenticateSession, which invalidates sessions on password change and
-     * authenticates nobody.
-     */
     private static function looksLikeAuth(string $middleware): bool
     {
         return $middleware === 'auth'

@@ -48,9 +48,6 @@ test('upserts existing emeq-hub webhook-client entry from hub.webhook', function
 });
 
 test('drops the placeholder entry Spatie merges in by default', function () {
-    // WebhookClientServiceProvider::new WebhookConfig() throws InvalidConfig
-    // on this exact shape — an empty process_webhook_job — so any consumer
-    // who did not publish webhook-client.php 500s on the first delivery.
     Log::spy();
 
     config()->set('webhook-client.configs', [

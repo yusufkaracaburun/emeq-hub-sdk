@@ -11,8 +11,6 @@ trait ResolvesAccountContext
     use DecodesHubJson;
 
     /**
-     * For endpoints that cannot be called without an account.
-     *
      * @throws MissingConfigurationException when neither an explicit id nor a
      *                                       bound resolver yields one
      */
@@ -27,10 +25,6 @@ trait ResolvesAccountContext
         return $resolved;
     }
 
-    /**
-     * For endpoints where the account only narrows the response (e.g. the
-     * integrations catalog). Returns null instead of throwing.
-     */
     protected function resolveOptionalAccountId(?string $accountId = null): ?string
     {
         if ($accountId !== null && $accountId !== '') {

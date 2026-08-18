@@ -15,22 +15,8 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 use Spatie\WebhookClient\Models\WebhookCall;
 use Throwable;
 
-/**
- * Shared Hub webhook processing: context bind → reload → dedupe → event dispatch.
- *
- * Single-DB apps can use this class as-is (or extend only hooks).
- * Multi-DB apps override bind/release/resolveWebhookCall and usually
- * {@see SerializesHubWebhookByIds}.
- *
- * Dedupe and locking live in {@see HubWebhookDeduplicator}; override
- * {@see deduplicator()} to supply a subclass of it.
- */
 class ProcessHubWebhookJob extends ProcessWebhookJob
 {
-    /**
-     * Explicit retry policy: without one the package inherits whatever the
-     * host's queue worker was started with, which is not a contract.
-     */
     public int $tries = 3;
 
     public int $backoff = 30;
@@ -84,17 +70,12 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
             $dedupe = $this->deduplicator();
             $dedupeId = $dedupe->identityFor($eventId);
 
-            // Still passes the raw event id on for correlation — it is only
-            // useless as an identity, not as a log line.
             if ($dedupeId === null) {
                 $this->processCall($call, $eventId, $requestId, $accountId);
 
                 return;
             }
 
-            // Dedupe is check-then-act, so two workers holding concurrent
-            // redeliveries of one event would both pass it. The lock makes the
-            // pair sequential; the loser then sees the winner's row.
             $lock = $dedupe->lock($dedupeId);
 
             if (! $lock->get()) {
@@ -163,16 +144,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         return is_numeric($key) ? (int) $key : 0;
     }
 
-    /**
-     * Records the failure on the webhook_calls row.
-     *
-     * Spatie only writes `exception` from the synchronous request path, so
-     * without this a crashed job leaves the column null — and alreadyProcessed()
-     * would then read that row as "handled" and drop Hub's redelivery.
-     *
-     * Both ways that can fail here reproduce exactly that outcome, so neither
-     * returns quietly: an unrecorded failure is louder than the failure itself.
-     */
     public function failed(?Throwable $exception): void
     {
         if ($exception === null) {
@@ -204,10 +175,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         }
     }
 
-    /**
-     * The row keeps `exception` null, so the dedupe guard will read this failed
-     * delivery as one that ran to completion and drop Hub's redelivery.
-     */
     private function logUnrecordedFailure(string $reason, Throwable $exception): void
     {
         Log::error('hub.webhook.failure_unrecorded', [
@@ -218,26 +185,13 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         ]);
     }
 
-    /**
-     * Switch tenant / DB before reading webhook_calls. Return false to abort.
-     */
     protected function bindAccountContext(string $accountId): bool
     {
         return true;
     }
 
-    protected function releaseAccountContext(): void
-    {
-        //
-    }
+    protected function releaseAccountContext(): void {}
 
-    /**
-     * Single-DB: the model Spatie hydrated is already complete.
-     *
-     * After {@see SerializesHubWebhookByIds} restores a job from the queue the
-     * model carries only its id, so it is reloaded here — which runs *after*
-     * bindAccountContext(), i.e. on the right connection for multi-DB consumers.
-     */
     protected function resolveWebhookCall(): ?WebhookCall
     {
         if ($this->webhookCall->payload !== null) {
@@ -269,13 +223,7 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         $this->onIgnored($envelope, $eventId, $requestId);
     }
 
-    /**
-     * Canonical events this job claims — routed to {@see onEvent()} instead
-     * of {@see onIgnored()}. `connection.revoked` always goes to
-     * {@see onConnectionRevoked()} regardless of what this returns.
-     *
-     * @return list<HubWebhookEvent>
-     */
+    /** @return list<HubWebhookEvent> */
     protected function handles(): array
     {
         return [];
@@ -298,11 +246,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         event(new HubConnectionRevoked($envelope, $eventId, $requestId));
     }
 
-    /**
-     * An event named in {@see handles()}. Override to act on it; the default
-     * only logs and dispatches {@see HubWebhookHandled}, so a consumer that
-     * prefers a listener over a subclass never has to override this either.
-     */
     protected function onEvent(
         HubWebhookEnvelope $envelope,
         ?string $eventId,
@@ -335,11 +278,6 @@ class ProcessHubWebhookJob extends ProcessWebhookJob
         event(new HubWebhookIgnored($envelope, $eventId, $requestId));
     }
 
-    /**
-     * The name HubServiceProvider registered the Spatie config under —
-     * `alreadyProcessed()` filters `webhook_calls.name` on it, so a hardcoded
-     * literal would match nothing for a consumer who renamed the config.
-     */
     protected function webhookConfigName(): string
     {
         $name = config('hub.webhook.name', 'emeq-hub');

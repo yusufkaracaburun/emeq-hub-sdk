@@ -12,16 +12,12 @@ it('normalizes comma-separated middleware and drops empties', function (): void 
 });
 
 it('ships a throttled default middleware stack', function (): void {
-    // The BFF fans out to the Hub API and Laravel's `api` group carries no
-    // rate limiter of its own, so the shipped default must bring one.
     $default = require __DIR__.'/../../config/hub.php';
 
     expect($default['routes']['middleware'])->toBe(['api', 'auth:sanctum', 'throttle:60,1']);
 });
 
 it('ships a default the boot guard accepts', function (): void {
-    // packageBooted() calls validated() against this value, so a default that
-    // fails it would make EMEQ_HUB_ROUTES=true unbootable out of the box.
     $default = require __DIR__.'/../../config/hub.php';
     config()->set('hub.routes', $default['routes']);
 
@@ -41,8 +37,6 @@ it('refuses empty middleware', function (): void {
 })->throws(InvalidArgumentException::class, 'must not be empty');
 
 it('refuses a middleware stack with no auth entry', function (): void {
-    // assertNotEmpty used to carry this promise in its message without ever
-    // checking it, so ['api'] registered an unauthenticated connect-session POST.
     HubRouteMiddleware::assertAuthenticated(['api', 'throttle:60,1']);
 })->throws(InvalidArgumentException::class, 'no auth middleware');
 
@@ -51,9 +45,6 @@ it('accepts the auth middleware family', function (string $entry): void {
 })->with(['auth', 'auth:sanctum', 'auth:api', 'auth.basic'])->throwsNoExceptions();
 
 it('refuses names Laravel cannot resolve to auth', function (string $entry): void {
-    // Aliases resolve by exact array key, so `AUTH:SANCTUM` is passed through as
-    // a class name; `auth.session` aliases AuthenticateSession, which
-    // authenticates nobody. Either would pass a stack with no working auth.
     HubRouteMiddleware::assertAuthenticated(['api', $entry]);
 })->with(['AUTH:SANCTUM', 'auth.session'])
     ->throws(InvalidArgumentException::class, 'no auth middleware');
@@ -81,7 +72,6 @@ it('reports a bad return path as configuration, not caller validation', function
         OAuthReturnUrl::fromConfigPath('https://app.example.test', 'https://evil.example/phish');
         expect(false)->toBeTrue('Expected MissingConfigurationException');
     } catch (MissingConfigurationException $e) {
-        // 503, not 422: the API caller cannot fix the consumer's config.
         expect($e->status)->toBe(503)
             ->and($e->category)->toBe('CONFIGURATION_ERROR');
     }

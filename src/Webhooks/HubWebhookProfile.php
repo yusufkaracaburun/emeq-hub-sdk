@@ -9,11 +9,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
 
-/**
- * Spatie profile: parse Hub envelope → ResolvesWebhookAccount::prepare().
- *
- * Bind {@see ResolvesWebhookAccount} in the host app (tenancy / status gates).
- */
 class HubWebhookProfile implements WebhookProfile
 {
     public function __construct(

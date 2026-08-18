@@ -20,19 +20,6 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Config;
 use Throwable;
 
-/**
- * Checks and books documents by (module, id) — one, or a batch.
- *
- * Owns the table nobody wants to rediscover: which failure becomes which
- * answer. Missing is 404, unauthorised is 403, unmappable is a refusal, an
- * undecided send is 503, and anything unexpected is reported rather than
- * shown raw.
- *
- * A batch stops once its time budget is spent, so a run cannot outlive the
- * request that started it. Callers get fewer results than they asked for and
- * repeat with the remainder — which is safe precisely because
- * {@see DocumentBooker} refuses to send an already-posted document.
- */
 class BookingRunner
 {
     public function __construct(
@@ -84,13 +71,8 @@ class BookingRunner
         try {
             return new CheckOutcome($module, $id, 200, $this->hub->accounting()->validateDocument($document->document), null);
         } catch (RateLimitException|ServerException $e) {
-            // Throttled or upstream is down: repeating this check is exactly the
-            // right move, so it must not land on 502 with the answers that are
-            // nobody's to act on. Same split {@see bookOne()} already makes.
             return new CheckOutcome($module, $id, 503, null, BookingMessages::line('temporarily_unavailable'), $e->retryAfter);
         } catch (HubException $e) {
-            // Hub could not answer. Says nothing about the document, so it is
-            // not a 422 the user can act on.
             return new CheckOutcome($module, $id, 502, null, $e->getMessage());
         } catch (Throwable $e) {
             report($e);
@@ -127,15 +109,6 @@ class BookingRunner
         return $this->announce($module, $id, BookingOutcome::from($record), $document->subject);
     }
 
-    /**
-     * Says what happened, and hands the outcome back so a caller reads as one
-     * expression.
-     *
-     * Fired here rather than in {@see DocumentBooker} because module and id are
-     * what a consumer logs against, and the booker is given a payload without
-     * either. A batch runs through {@see bookOne()}, so it reports per document
-     * and needs nothing of its own.
-     */
     protected function announce(string $module, string $id, BookingOutcome $outcome, mixed $subject = null): BookingOutcome
     {
         event($outcome->booked
@@ -169,10 +142,6 @@ class BookingRunner
         return $results;
     }
 
-    /**
-     * Checked after each document, never before: one document always runs, so a
-     * caller cannot get an empty answer it has no way to make progress on.
-     */
     protected function timeBudget(): float
     {
         $seconds = Config::get('hub.booking.batch_seconds');

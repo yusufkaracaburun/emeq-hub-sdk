@@ -14,27 +14,12 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
-/**
- * "Which of my documents are not booked yet" — a join, not a lookup.
- *
- * Hub cannot answer this: it is a query over the consumer's own documents, left
- * joined to their booking state, filtered and sorted by the consumer's columns
- * (see ADR-0003). The consumer supplies the documents through
- * {@see ProvidesBacklogSources}; everything downstream of that is here.
- *
- * The ledger has to live on the same connection as those documents — a join
- * cannot span two databases, and `hub.booking.connection` says where it is.
- */
 class BacklogRepository
 {
     public const DIRECTIONS = ['sales', 'purchase'];
 
     public const SORTS = ['date', 'number', 'amount', 'party'];
 
-    /**
-     * Ceiling for a caller-supplied `page_length`. Validate against it: this
-     * query unions every module before it pages.
-     */
     public const MAX_PAGE_LENGTH = 200;
 
     public function __construct(
@@ -44,10 +29,6 @@ class BacklogRepository
     ) {}
 
     /**
-     * Rows carry `hub_document` — the full ledger row, or null when the
-     * document was never attempted. The joined `status` alone cannot say why
-     * an attempt was refused.
-     *
      * @param  array<string, mixed>  $params
      * @return LengthAwarePaginator<int, stdClass>
      */
@@ -60,9 +41,7 @@ class BacklogRepository
         return $page;
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     public function summary(array $params): BacklogSummary
     {
         $groups = DB::query()
@@ -92,9 +71,6 @@ class BacklogRepository
             }
         }
 
-        // A sibling aggregate, not a widened groupBy(): a document counts here
-        // regardless of its status, so folding it into `by_status` would either
-        // double-count it or steal it from `posted`'s (absent) bucket.
         $accountingChanged = (int) DB::query()
             ->fromSub($this->filtered($params), 'backlog')
             ->whereNotNull('accounting_changed_at')
@@ -103,9 +79,7 @@ class BacklogRepository
         return new BacklogSummary(array_sum($byStatus), $amountTotal, $byStatus, $byModule, $oldestDate, $accountingChanged);
     }
 
-    /**
-     * @param  array<int, mixed>  $items
-     */
+    /** @param  array<int, mixed>  $items */
     protected function attachBookings(array $items): void
     {
         $externalIds = [];
@@ -125,9 +99,7 @@ class BacklogRepository
         }
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function sorted(array $params): Builder
     {
         $sortBy = in_array($params['sort_by'] ?? null, self::SORTS, true) ? (string) $params['sort_by'] : 'date';
@@ -135,8 +107,6 @@ class BacklogRepository
 
         $documents = $this->filtered($params)->orderBy($sortBy, $order);
 
-        // Same-day documents would otherwise come back in whatever order the
-        // union happened to produce, which changes between pages.
         if ($sortBy !== 'number') {
             $documents->orderBy('number', 'desc');
         }
@@ -144,9 +114,7 @@ class BacklogRepository
         return $documents->orderBy('uuid');
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function filtered(array $params): Builder
     {
         $modules = array_values(array_filter(
@@ -204,25 +172,13 @@ class BacklogRepository
         return $this->filterByStatus($documents, $this->requestedStatuses($params));
     }
 
-    /**
-     * A changed document is `posted` *and* changed — orthogonal to
-     * {@see BacklogStatus}, not a value inside it, so it composes with
-     * whatever status filter the caller already applied instead of competing
-     * with it.
-     *
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function wantsAccountingChanged(array $params): bool
     {
         return filter_var($params['accounting_changed'] ?? false, FILTER_VALIDATE_BOOLEAN);
     }
 
-    /**
-     * `not_booked` is the absence of a row, so it cannot be expressed as a
-     * value in the same `whereIn` as the others.
-     *
-     * @param  list<string>  $statuses
-     */
+    /** @param  list<string>  $statuses */
     protected function filterByStatus(Builder $documents, array $statuses): Builder
     {
         if ($statuses === []) {
@@ -242,11 +198,6 @@ class BacklogRepository
         });
     }
 
-    /**
-     * The booking each backlog document carries, one row per document: the same
-     * external_id can hold more than one row when the Hub type changed between
-     * attempts, and the last attempt is the one that describes it.
-     */
     protected function latestBookings(): Builder
     {
         $ledger = new HubDocument;
@@ -268,9 +219,7 @@ class BacklogRepository
             ]);
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function pageLength(array $params): int
     {
         $requested = $params['page_length'] ?? Config::get('hub.booking.page_length');
@@ -280,9 +229,7 @@ class BacklogRepository
         return max(1, min($length, self::MAX_PAGE_LENGTH));
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function date(array $params, string $key): ?string
     {
         $value = $params[$key] ?? null;
@@ -290,9 +237,7 @@ class BacklogRepository
         return is_string($value) && $value !== '' ? $value : null;
     }
 
-    /**
-     * @param  array<string, mixed>  $params
-     */
+    /** @param  array<string, mixed>  $params */
     protected function amount(array $params, string $key): ?float
     {
         $value = $params[$key] ?? null;

@@ -8,9 +8,7 @@ use Emeq\HubSdk\Exceptions\HubException;
 
 trait DecodesHubJson
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function json(mixed $payload): array
     {
         if (! is_array($payload)) {
@@ -25,9 +23,7 @@ trait DecodesHubJson
         return $payload;
     }
 
-    /**
-     * @return list<array<string, mixed>>
-     */
+    /** @return list<array<string, mixed>> */
     protected function jsonList(mixed $payload): array
     {
         if (! is_array($payload)) {

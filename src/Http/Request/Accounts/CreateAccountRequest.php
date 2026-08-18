@@ -25,9 +25,7 @@ class CreateAccountRequest extends Request implements HasBody
         return '/accounts';
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function defaultBody(): array
     {
         $body = ['external_id' => $this->externalId];

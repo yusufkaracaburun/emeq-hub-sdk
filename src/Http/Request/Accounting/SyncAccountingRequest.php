@@ -17,14 +17,7 @@ class SyncAccountingRequest extends Request implements HasBody
 
     protected Method $method = Method::POST;
 
-    /**
-     * Note: not named `$body` — HasJsonBody already declares a non-readonly
-     * `$body` property, and promoting a readonly one of the same name is a
-     * fatal error at class-load time. Same trap as `$query` in
-     * GetAccountingRequest.
-     *
-     * @param  array<string, mixed>  $payload
-     */
+    /** @param  array<string, mixed>  $payload */
     public function __construct(
         private readonly string $accountId,
         private readonly array $payload = [],
@@ -35,17 +28,13 @@ class SyncAccountingRequest extends Request implements HasBody
         return '/accounting/sync';
     }
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     protected function defaultHeaders(): array
     {
         return $this->accountIdHeaders($this->accountId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function defaultBody(): array
     {
         return $this->payload;

@@ -13,10 +13,6 @@ use Emeq\HubSdk\Resources\ConnectSessions;
 use Emeq\HubSdk\Resources\Integrations;
 use Emeq\HubSdk\Resources\OAuth;
 
-/**
- * Entry point for the Hub consumer API. Provider-agnostic: new Hub partners
- * appear via integrations discovery without SDK changes.
- */
 class Hub
 {
     public function __construct(

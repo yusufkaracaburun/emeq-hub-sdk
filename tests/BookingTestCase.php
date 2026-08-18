@@ -13,10 +13,6 @@ use Emeq\HubSdk\Tests\Doubles\FixedAccountId;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * The ledger needs a database and an account. Runs the published migration
- * stub itself, so the stub is exercised by every booking test.
- */
 abstract class BookingTestCase extends TestCase
 {
     protected const ACCOUNT_ID = 'tenant-1';
@@ -36,17 +32,12 @@ abstract class BookingTestCase extends TestCase
         $migration = require __DIR__.'/../database/migrations/create_hub_documents_table.php.stub';
         $migration->up();
 
-        // The schema answer is cached for the process; the schema itself is
-        // rebuilt per test, and one of them drops the trace columns.
         HubDocument::forgetTraceSupport();
         AccountingChangeRecorder::forgetChangeSupport();
 
         $this->createDocumentsTable();
     }
 
-    /**
-     * Stands in for the consumer tables a real backlog source reads.
-     */
     protected function createDocumentsTable(): void
     {
         Schema::create(FakeBacklogSources::TABLE, function (Blueprint $table): void {

@@ -25,8 +25,6 @@ use Spatie\WebhookClient\WebhookProfile\WebhookProfile;
 beforeEach(function () {
     config()->set('hub.webhook.secret', 'test-webhook-secret');
 
-    // The published stub itself, so the table these tests run against is the
-    // one consumers migrate — including its dedupe index.
     $migration = require __DIR__.'/../../database/migrations/create_webhook_calls_table.php.stub';
     $migration->down();
     $migration->up();
@@ -57,8 +55,6 @@ function makeWebhookCall(array $overrides = []): WebhookCall
 }
 
 test('spatie config entry is built from its arguments, not global config', function () {
-    // Reading config() from here would make the builder unusable before boot.
-    // HubServiceProvider owns the lookups; WebhookClientConfigTest covers that.
     config()->set('hub.webhook.secret', 'ignored-global');
 
     $entry = SpatieWebhookClientConfig::make(signingSecret: 'passed-in');
@@ -240,8 +236,6 @@ test('onEvent defaults to logging and dispatching HubWebhookHandled', function (
 });
 
 test('default handles() keeps every existing consumer routed to onIgnored, unchanged', function () {
-    // Backwards-compatibility: a job that overrides nothing must behave
-    // exactly as it did before handles()/onEvent() existed.
     Event::fake([HubWebhookIgnored::class, HubWebhookHandled::class]);
 
     $call = makeWebhookCall([
@@ -298,8 +292,6 @@ test('job skips when account id empty', function () {
             'data' => [],
         ],
     ]);
-    // The constructor reads account_id off the payload; an empty one aborts
-    // before the envelope is parsed at all.
     (new ProcessHubWebhookJob($call))->handle();
 
     Event::assertNotDispatched(HubWebhookReceived::class);
@@ -330,9 +322,6 @@ test('serializes hub webhook by ids round-trips', function () {
 });
 
 test('a failed job records its exception so the redelivery is not deduplicated', function () {
-    // Regression: alreadyProcessed() treats any earlier row with a null
-    // exception as handled, but nothing wrote that column from the queued
-    // path — so a crashed webhook silently suppressed its own redelivery.
     Event::fake([HubWebhookReceived::class]);
 
     $first = makeWebhookCall([
@@ -353,9 +342,6 @@ test('a failed job records its exception so the redelivery is not deduplicated',
 });
 
 test('a failure it cannot record is logged as an error, not swallowed', function () {
-    // Both early exits in failed() leave `exception` null, which is exactly the
-    // state alreadyProcessed() reads as "ran to completion" — so the redelivery
-    // is dropped. Silence there hides the same bug the failed() hook exists for.
     Log::spy();
 
     $call = makeWebhookCall();
@@ -396,9 +382,6 @@ test('a failure with no resolvable webhook_calls row is logged as an error', fun
 });
 
 test('an opaque event id identifies nothing and is never deduplicated', function () {
-    // Hub sends the literal 'no-id' when the partner omitted an id of its own
-    // (Snelstart), so unrelated events share it. Deduplicating on that value
-    // made the first delivery swallow every later one for that account.
     Event::fake([HubWebhookReceived::class]);
 
     makeWebhookCall([
@@ -421,7 +404,6 @@ test('an opaque event id takes no lock, so concurrent deliveries both process', 
         'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['no-id']],
     ]);
 
-    // Whatever key another worker might hold, an opaque id must not contend.
     $held = Cache::lock('hub-webhook:emeq-hub:42:no-id', 30);
     expect($held->get())->toBeTrue();
 
@@ -443,12 +425,9 @@ test('a subclass can widen the opaque list', function () {
         'headers' => [strtolower(HubWebhookHeaders::EVENT_ID) => ['placeholder']],
     ]);
 
-    // The base job deduplicates `placeholder`: it is a real id as far as it knows.
     (new ProcessHubWebhookJob($second))->handle();
     Event::assertNotDispatched(HubWebhookReceived::class);
 
-    // The sentinel list moved onto the deduplicator, so widening it is one
-    // constructor argument from the job's one dedupe hook.
     (new class($second) extends ProcessHubWebhookJob
     {
         protected function deduplicator(): HubWebhookDeduplicator
@@ -473,7 +452,6 @@ test('a concurrent delivery of the same event id is skipped, not raced', functio
 
     $job = new ProcessHubWebhookJob($call);
 
-    // Stand in for the worker that got there first and still holds the lock.
     $held = Cache::lock('hub-webhook:emeq-hub:42:evt-concurrent', 30);
     expect($held->get())->toBeTrue();
 
@@ -485,10 +463,6 @@ test('a concurrent delivery of the same event id is skipped, not raced', functio
 });
 
 test('a delivery for another account is not deduplicated against the first', function () {
-    // Regression: both halves of the guard were keyed on the event id alone —
-    // the cache lock globally, and alreadyProcessed() on a webhook_calls table
-    // that single-DB consumers share across accounts. Two accounts delivered
-    // one event id dropped the second as a duplicate.
     Event::fake([HubWebhookReceived::class]);
 
     makeWebhookCall([
@@ -505,7 +479,6 @@ test('a delivery for another account is not deduplicated against the first', fun
         ],
     ]);
 
-    // The unscoped key account 42's worker used to take: it must not block 99.
     $held = Cache::lock('hub-webhook:emeq-hub:evt-shared', 30);
     expect($held->get())->toBeTrue();
 
@@ -517,8 +490,6 @@ test('a delivery for another account is not deduplicated against the first', fun
 });
 
 test('a numeric account id in the payload still deduplicates its redelivery', function () {
-    // json_extract hands SQLite an integer, so the account filter has to match
-    // a JSON number as well as a JSON string or dedupe silently stops firing.
     Event::fake([HubWebhookReceived::class]);
 
     $payload = [
@@ -555,10 +526,6 @@ test('a successfully processed call still deduplicates its redelivery', function
 });
 
 test('a restored by-ids job reloads the stripped webhook call and still processes', function () {
-    // Regression: __unserialize rebuilds a WebhookCall carrying only its id.
-    // The old default resolveWebhookCall() handed that hollow model straight
-    // back, so payload was null and the job logged invalid_payload_in_job and
-    // returned — a dropped webhook that looked like a clean run.
     Event::fake([HubWebhookReceived::class, HubConnectionRevoked::class]);
 
     $call = makeWebhookCall();
@@ -608,8 +575,6 @@ test('hub webhook event constants match hub canonical vocabulary', function () {
 });
 
 test('an event this SDK release does not know decodes to unmapped', function () {
-    // Forward-compatibility: Hub may add canonical events without an SDK
-    // release, so an unknown wire value must not throw.
     $envelope = HubWebhookEnvelope::tryFromArray([
         'event' => 'accounting.something.invented.later',
         'provider' => 'exact',

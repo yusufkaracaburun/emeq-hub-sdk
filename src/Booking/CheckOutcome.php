@@ -4,18 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Booking;
 
-/**
- * What a dry run said about one document.
- *
- * Checking costs nothing upstream and catches most refusals before a batch
- * writes anything, so `result === null` (never checked) is a different answer
- * from a check that came back with findings.
- *
- * Carries the same status vocabulary as {@see BookingOutcome}, and for the same
- * reason: "this document is wrong" (422) and "Hub could not answer" (502) look
- * alike to a caller that only has a message, and only one of them is the user's
- * to fix.
- */
 final class CheckOutcome
 {
     /**
@@ -38,10 +26,6 @@ final class CheckOutcome
         return $this->result !== null;
     }
 
-    /**
-     * The check failed for a reason unrelated to the document. Only this one
-     * may be repeated as-is.
-     */
     public function mayRetry(): bool
     {
         return $this->status === 503;

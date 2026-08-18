@@ -9,10 +9,6 @@ use Emeq\HubSdk\Backlog\PostedDocuments;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Stands in for a consumer's own tables. One table here, unioned per module, so
- * the union path the real implementations take is exercised too.
- */
 final class FakeBacklogSources implements ProvidesBacklogSources
 {
     public const TABLE = 'test_documents';

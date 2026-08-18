@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Webhooks;
 
 /**
- * Body shape of every Hub → consumer webhook.
- *
  * @phpstan-type EnvelopeArray array{
  *     event: string,
  *     provider: string,
@@ -56,9 +54,7 @@ final class HubWebhookEnvelope
         return self::tryFromArray($payload);
     }
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
+    /** @param  array<string, mixed>  $payload */
     public static function tryFromArray(array $payload): ?self
     {
         $accountId = $payload['account_id'] ?? null;
@@ -82,16 +78,6 @@ final class HubWebhookEnvelope
         );
     }
 
-    /**
-     * Whether this delivery is the echo of your own write, landing within
-     * $seconds of it.
-     *
-     * Hub reports authorship and timing but draws no line itself, because the
-     * line belongs to the consumer: a change long after Hub's last write is a
-     * human editing in the provider's own UI, and that is a change you want to
-     * see. Anything this cannot establish reads as "not an echo" — the safe
-     * direction is to look at an event, not to drop it.
-     */
     public function isOwnEcho(int $seconds = 300): bool
     {
         if (! $this->hubAuthored || $this->hubLastWroteAt === null || $this->occurredAt === null) {
@@ -108,17 +94,12 @@ final class HubWebhookEnvelope
         return ($occurredAt - $wroteAt) <= $seconds;
     }
 
-    /**
-     * Webhook bodies are untrusted: a non-scalar reads as absent.
-     */
     private static function text(mixed $value): ?string
     {
         return is_scalar($value) ? (string) $value : null;
     }
 
-    /**
-     * @return EnvelopeArray
-     */
+    /** @return EnvelopeArray */
     public function toArray(): array
     {
         $payload = [

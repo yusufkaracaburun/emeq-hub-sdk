@@ -7,13 +7,6 @@ namespace Emeq\HubSdk\Webhooks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Correlation / dedupe headers Hub sets on outbound consumer webhooks.
- *
- * Owns how Spatie persists them: Symfony lowercases header keys and stores
- * each value as an array. Both the PHP readers and the query builder below
- * derive from that one fact.
- */
 final class HubWebhookHeaders
 {
     public const SIGNATURE = 'Signature';
@@ -24,11 +17,7 @@ final class HubWebhookHeaders
 
     public const REQUEST_ID = 'X-Emeq-Request-Id';
 
-    /**
-     * Headers Spatie webhook-client should persist for processing.
-     *
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function storeHeaders(): array
     {
         return [
@@ -38,11 +27,7 @@ final class HubWebhookHeaders
         ];
     }
 
-    /**
-     * Case-insensitive header lookup from a Spatie-stored headers array.
-     *
-     * @param  array<string, mixed>  $headers
-     */
+    /** @param  array<string, mixed>  $headers */
     public static function value(array $headers, string $name): ?string
     {
         foreach ($headers as $key => $value) {
@@ -60,13 +45,7 @@ final class HubWebhookHeaders
         return null;
     }
 
-    /**
-     * Query counterpart of {@see self::eventId()} — same knowledge about how
-     * Spatie persists the header (lowercased key, value stored as an array),
-     * expressed once for the database side.
-     *
-     * @param  Builder<covariant Model>  $query
-     */
+    /** @param  Builder<covariant Model>  $query */
     public static function whereEventId(Builder $query, string $eventId): void
     {
         $key = strtolower(self::EVENT_ID);
@@ -79,9 +58,7 @@ final class HubWebhookHeaders
         });
     }
 
-    /**
-     * @param  array<string, mixed>  $headers
-     */
+    /** @param  array<string, mixed>  $headers */
     public static function eventId(array $headers): ?string
     {
         $value = self::value($headers, self::EVENT_ID);
@@ -89,9 +66,7 @@ final class HubWebhookHeaders
         return ($value !== null && $value !== '') ? $value : null;
     }
 
-    /**
-     * @param  array<string, mixed>  $headers
-     */
+    /** @param  array<string, mixed>  $headers */
     public static function requestId(array $headers): ?string
     {
         $value = self::value($headers, self::REQUEST_ID);

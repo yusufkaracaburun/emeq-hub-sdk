@@ -16,8 +16,6 @@ use Emeq\HubSdk\Testing\HubMock;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 
-// MockClient::global() is `??=`: a leaked instance silently ignores the next
-// test's mock data. Same reason consumers must destroy it in their own suites.
 afterEach(function (): void {
     MockClient::destroyGlobal();
 });
@@ -113,9 +111,6 @@ it('maps validation errors', function (): void {
 });
 
 it('sends accounting list requests with account header and query', function (): void {
-    // Regression: GetAccountingRequest promoted a readonly $query property,
-    // which collides with Saloon\Http\Request::$query and fatals at class-load —
-    // every accounting GET was unusable.
     $mock = new MockClient([
         GetAccountingRequest::class => HubMock::documents(),
     ]);
@@ -133,9 +128,6 @@ it('sends accounting list requests with account header and query', function (): 
 });
 
 it('keeps the cursor from a paginated accounting collection', function (): void {
-    // Hub answers collection reads with {data, next_cursor}; dropping the cursor
-    // would make paging impossible. Captured on an administration with more
-    // ledger accounts than fit in one page.
     $mock = new MockClient([
         GetAccountingRequest::class => HubMock::ledgerAccounts(),
     ]);
@@ -165,8 +157,6 @@ it('reports the last page as having no cursor', function (): void {
 });
 
 it('throws a catchable HubException when no account id can be resolved', function (): void {
-    // No ResolvesAccountId bound and no explicit id: consumers who wrap SDK
-    // calls in catch (HubException) must still catch this.
     try {
         app(Hub::class)->accounting()->documents();
         $this->fail('Expected MissingConfigurationException');
@@ -194,9 +184,6 @@ it('lists the integrations catalog without an account id', function (): void {
 });
 
 it('is mockable from a consumer app through a global mock client on url patterns', function (): void {
-    // The path README documents for consumers: no saloonphp/laravel-plugin, so
-    // no Saloon::fake(); and no imports from the package-internal Http\Request
-    // namespace, so the mock is keyed on the URL.
     $mock = MockClient::global([
         '*/v1/accounting/documents' => MockResponse::make(['id' => 'doc_1'], 201),
     ]);
@@ -211,7 +198,6 @@ it('is mockable from a consumer app through a global mock client on url patterns
 
     expect($created)->toBe(['id' => 'doc_1']);
 
-    // external_id is the documented source of the key: same document, same key.
     expect($mock->getLastPendingRequest()?->headers()->get('Idempotency-Key'))
         ->toBe('invoice-42');
 });
@@ -297,8 +283,6 @@ it('hands the consumer log the value that ties a failure to a Hub log line', fun
         app(Hub::class)->integrations()->list();
         $this->fail('Expected AuthenticationException');
     } catch (HubException $e) {
-        // Laravel's handler calls context() and merges it into the log record,
-        // so this arrives without the consumer configuring anything.
         expect($e->context())->toBe([
             'hub_request_id' => 'req_4',
             'hub_error' => 'unauthenticated',

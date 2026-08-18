@@ -8,13 +8,7 @@ use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
 
 class OAuth extends Resource
 {
-    /**
-     * Start OAuth for any Hub provider key (no SDK allowlist).
-     *
-     * Hub's response is not validated here — read keys defensively.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function init(string $provider, ?string $accountExternalId = null, ?string $returnUrl = null): array
     {
         $accountExternalId = $this->resolveAccountId($accountExternalId);

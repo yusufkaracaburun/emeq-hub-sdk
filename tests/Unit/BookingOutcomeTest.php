@@ -44,11 +44,6 @@ it('reports a refusal with Hub\'s own message, which names what is missing', fun
         ->and($outcome->message)->toBe('Ledger account 8000 does not exist.');
 });
 
-/**
- * Reachable only for a row this package did not write — one it stores always
- * carries Hub's message. The package therefore ships no copy per error code:
- * Hub owns that, and says it better.
- */
 it('falls back to the generic line when a row carries no message', function (): void {
     $outcome = BookingOutcome::from(ledgerRecord([
         'status' => HubDocument::STATUS_FAILED,

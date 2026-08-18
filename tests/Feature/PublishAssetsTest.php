@@ -28,10 +28,6 @@ test('publishes hub config and migrations', function () {
         ->and($migrations->filter(fn (string $name) => str_contains($name, 'add_trace_to_hub_documents_table')))->not->toBeEmpty();
 });
 
-/**
- * A first-time consumer publishes both stubs, so the second has to be a no-op
- * against the table the first just created.
- */
 test('the trace migration skips a ledger that already has the columns', function () {
     $create = require __DIR__.'/../../database/migrations/create_hub_documents_table.php.stub';
     $create->up();
@@ -42,9 +38,6 @@ test('the trace migration skips a ledger that already has the columns', function
     expect(Schema::hasColumns('hub_documents', ['request_id', 'category']))->toBeTrue();
 });
 
-/**
- * And it does its actual job on a ledger created before the columns existed.
- */
 test('the trace migration adds the columns to an older ledger', function () {
     $create = require __DIR__.'/../../database/migrations/create_hub_documents_table.php.stub';
     $create->up();

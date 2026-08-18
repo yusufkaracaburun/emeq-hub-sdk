@@ -10,20 +10,9 @@ use Emeq\HubSdk\Http\Request\Accounting\PutMappingRequest;
 use Emeq\HubSdk\Http\Request\Accounting\SyncAccountingRequest;
 use Emeq\HubSdk\Http\Request\Accounting\ValidateDocumentRequest;
 
-/**
- * Canonical accounting surface — Hub picks the partner adapter.
- */
 class Accounting extends Resource
 {
     /**
-     * Book a canonical document. Sent as `Idempotency-Key`.
-     *
-     * $idempotencyKey must be stable per logical write: the same document
-     * retried after a timeout has to present the same key, or Hub books it a
-     * second time. The document's `external_id` is the canonical document key
-     * and the intended source — never a fresh uuid per call, which is exactly
-     * the case the header exists for.
-     *
      * @param  array<string, mixed>  $document
      * @return array<string, mixed>
      */
@@ -52,73 +41,55 @@ class Accounting extends Resource
         return $this->json($response->json());
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function documents(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/documents', $query, $accountId);
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function bankStatements(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/bank-statements', $query, $accountId);
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function ledgerAccounts(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/ledger-accounts', $query, $accountId);
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function taxCodes(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/tax-codes', $query, $accountId);
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function customers(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/customers', $query, $accountId);
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     public function suppliers(array $query = [], ?string $accountId = null): AccountingPage
     {
         return $this->getList('/accounting/suppliers', $query, $accountId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function capabilities(?string $accountId = null): array
     {
         return $this->getObject('/accounting/capabilities', $accountId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function referenceData(?string $accountId = null): array
     {
         return $this->getObject('/accounting/reference-data', $accountId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function mapping(?string $accountId = null): array
     {
         return $this->getObject('/accounting/mapping', $accountId);
@@ -152,29 +123,19 @@ class Accounting extends Resource
         return $this->json($response->json());
     }
 
-    /**
-     * Collection endpoints: `{data: [...], next_cursor: "…"}`.
-     *
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     private function getList(string $path, array $query, ?string $accountId): AccountingPage
     {
         return AccountingPage::fromPayload($this->send($path, $query, $accountId));
     }
 
-    /**
-     * Single-object endpoints.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function getObject(string $path, ?string $accountId): array
     {
         return $this->json($this->send($path, [], $accountId));
     }
 
-    /**
-     * @param  array<string, mixed>  $query
-     */
+    /** @param  array<string, mixed>  $query */
     private function send(string $path, array $query, ?string $accountId): mixed
     {
         return $this->connector->send(new GetAccountingRequest(

@@ -8,13 +8,6 @@ use Closure;
 use Emeq\HubSdk\Events\DocumentBooked;
 use Emeq\HubSdk\Events\DocumentBookingFailed;
 
-/**
- * A consumer document, mapped and ready to send.
- *
- * The attachment renderer stays a closure rather than a rendered array so it
- * only runs when a booking actually happens, and so a renderer that throws is
- * recorded by {@see DocumentBooker} instead of losing the attempt.
- */
 final class BookableDocument
 {
     /**

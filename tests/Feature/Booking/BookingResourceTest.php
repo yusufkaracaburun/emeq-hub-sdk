@@ -29,10 +29,6 @@ it('reads accounting_changed_at as null for a document never reported changed', 
         ->and($resolved['accounting_change_action'])->toBeNull();
 });
 
-/**
- * The trace has to reach a screen to be worth storing: a support question that
- * quotes the request id turns the Hub side into one lookup.
- */
 it('hands the frontend the value that ties a failure to a Hub log line', function (): void {
     $record = HubDocument::query()->create([
         'account_id' => 'tenant-1',

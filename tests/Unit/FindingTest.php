@@ -10,9 +10,6 @@ test('reads an explicit blocking flag', function (): void {
 });
 
 test('reads null, never false, when blocking is absent', function (): void {
-    // This is the pre-deploy Hub shape: `severity` only, no `blocking` key at
-    // all. Coercing that to `false` would recreate the exact silent trap the
-    // field exists to close — a "blocking: false" a caller can trust.
     expect(Finding::isBlocking([
         'code' => 'exact.relation.new',
         'severity' => 'warning',

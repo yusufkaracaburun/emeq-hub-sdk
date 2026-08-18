@@ -9,9 +9,6 @@ use Saloon\Enums\Method;
 use Saloon\Http\Request;
 use Saloon\Traits\Body\HasJsonBody;
 
-/**
- * Provider key is a free string from Hub discovery — no SDK allowlist.
- */
 class InitOAuthRequest extends Request implements HasBody
 {
     use HasJsonBody;
@@ -29,9 +26,7 @@ class InitOAuthRequest extends Request implements HasBody
         return '/oauth/'.rawurlencode($this->provider).'/init';
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function defaultBody(): array
     {
         $body = ['account_external_id' => $this->accountExternalId];

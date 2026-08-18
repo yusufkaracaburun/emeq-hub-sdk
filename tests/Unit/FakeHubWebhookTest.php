@@ -14,7 +14,6 @@ use Spatie\WebhookClient\SignatureValidator\DefaultSignatureValidator;
 use Spatie\WebhookClient\WebhookConfig;
 
 beforeEach(function (): void {
-    // WebhookConfig resolves webhook_profile through the container.
     $this->app->instance(ResolvesWebhookAccount::class, new class implements ResolvesWebhookAccount
     {
         public function prepare(string $accountId): bool

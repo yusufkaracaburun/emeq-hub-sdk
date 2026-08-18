@@ -27,11 +27,8 @@ class HubServiceProvider extends PackageServiceProvider
             ->name('hub')
             ->hasConfigFile('hub')
             ->hasTranslations()
-            // Publish-only — do not auto-load (multi-DB consumers pick the connection).
             ->hasMigration('create_webhook_calls_table')
             ->hasMigration('create_hub_documents_table')
-            // Only bites on a ledger that predates the trace columns; a fresh
-            // create already has them, and neither is required to book.
             ->hasMigration('add_trace_to_hub_documents_table')
             ->hasInstallCommand(function (InstallCommand $command): void {
                 $command
@@ -84,23 +81,11 @@ class HubServiceProvider extends PackageServiceProvider
             return;
         }
 
-        // Under route:cache the route file never runs, so this is the only
-        // place the guard fires. Result unused: routes/hub.php asks for the
-        // same validated stack when it does run.
         HubRouteMiddleware::validated();
 
         $this->loadRoutesFrom(__DIR__.'/../routes/hub.php');
     }
 
-    /**
-     * Marks a booked document the bookkeeping changed afterwards.
-     *
-     * Wired as a listener rather than called from {@see ProcessHubWebhookJob}
-     * so a consumer that subclasses the job — every multi-DB one does — keeps
-     * the marker without remembering to call `parent::`, and so the webhook
-     * layer gains no dependency on the ledger. `HubWebhookReceived` fires for
-     * every accepted envelope after the account context is bound.
-     */
     private function registerAccountingChangeRecorder(): void
     {
         /** @var Repository $config */
@@ -153,12 +138,6 @@ class HubServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * Spatie's WebhookClientServiceProvider maps every config entry through
-     * `new WebhookConfig()`, which throws `InvalidConfig` on an empty
-     * `process_webhook_job` — exactly what Spatie's own default config ships
-     * when nothing overrides it, so a consumer who never published
-     * `webhook-client.php` 500s on the first delivery of any kind.
-     *
      * @param  list<array<string, mixed>>  $configs
      * @return list<array<string, mixed>>
      */

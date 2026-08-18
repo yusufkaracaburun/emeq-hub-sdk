@@ -21,15 +21,11 @@ use Illuminate\Support\Facades\Facade;
  * @method static ConnectSessions connectSessions()
  * @method static Connections connections()
  * @method static Accounting accounting()
- *
- * @see \Emeq\HubSdk\Hub
  */
 class Hub extends Facade
 {
     protected static function getFacadeAccessor(): string
     {
-        // Not imported: the facade shares its short name with the class it
-        // proxies, and an alias here would name a class that does not exist.
         return \Emeq\HubSdk\Hub::class;
     }
 }

@@ -14,9 +14,7 @@ use Emeq\HubSdk\Tests\Doubles\FakeBookableDocuments;
 use Illuminate\Support\Facades\Event;
 use Saloon\Http\Faking\MockClient;
 
-/**
- * @param  array<string, BookableDocument|Throwable>  $map
- */
+/** @param  array<string, BookableDocument|Throwable>  $map */
 function runnerFor(array $map): BookingRunner
 {
     app()->bind(ResolvesBookableDocument::class, fn (): ResolvesBookableDocument => new FakeBookableDocuments($map));

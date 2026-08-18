@@ -20,9 +20,7 @@ class ListIntegrationsRequest extends Request
         return '/integrations';
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function defaultQuery(): array
     {
         if ($this->accountExternalId === null || $this->accountExternalId === '') {

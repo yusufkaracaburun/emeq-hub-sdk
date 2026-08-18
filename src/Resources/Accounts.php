@@ -8,9 +8,7 @@ use Emeq\HubSdk\Http\Request\Accounts\CreateAccountRequest;
 
 class Accounts extends Resource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function create(string $externalId, ?string $displayName = null): array
     {
         $response = $this->connector->send(new CreateAccountRequest($externalId, $displayName));

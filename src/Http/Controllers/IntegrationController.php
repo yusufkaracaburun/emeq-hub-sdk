@@ -15,39 +15,16 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Thin Hub BFF: status list + hosted connect handoff.
- *
- * Connect / disconnect live on Hub's `/connect/{account}` page — consumers
- * mint a session URL and send the user there (single source of truth).
- * Account id is always server-side via ResolvesAccountId — never from the request.
- *
- * @internal Package HTTP surface — prefer Facades\Hub / Resources from app code.
- */
 class IntegrationController extends Controller
 {
-    /**
-     * The resolver is a consumer binding and may be absent; the container
-     * injects null for an unbound interface that has a default.
-     */
     public function __construct(
         private readonly Hub $hub,
         private readonly ?ResolvesAccountId $accountIdResolver = null,
     ) {}
 
-    /**
-     * List the integrations this account can connect.
-     *
-     * Answers `list<array<string, mixed>>`, the same shape `Integrations::list()`
-     * declares. Item keys stay untyped on purpose: Hub's discovery payload is
-     * data-driven per provider, and narrowing keys here would mean hard-coding
-     * a schema ADR-0001 deliberately keeps out of the SDK.
-     */
     public function index(): JsonResponse
     {
         try {
-            // Guard only: the catalog is account-optional, but this endpoint is
-            // not usable at all without a bound resolver.
             $this->assertAccountResolverBound();
 
             return response()->json($this->hub->integrations()->list());
@@ -56,14 +33,6 @@ class IntegrationController extends Controller
         }
     }
 
-    /**
-     * Mint Hub's hosted connect handoff page URL.
-     *
-     * Deliberately reads no input from the request body or query: the account
-     * comes from ResolvesAccountId and the return path from config. The request
-     * is here for the app's own scheme + host, nothing else — which is why
-     * there is no FormRequest.
-     */
     public function connectSession(Request $request): JsonResponse
     {
         try {
@@ -85,10 +54,6 @@ class IntegrationController extends Controller
     }
 
     /**
-     * Hub's response is untrusted JSON, narrowed the same way `returnPath()`
-     * narrows config — a non-string value reads as absent rather than
-     * widening the generated OpenAPI schema (and consumer TypeScript) to `any`.
-     *
      * @param  array<string, mixed>  $session
      * @return array{url: string|null, expires_at: string|null}
      */
@@ -107,9 +72,7 @@ class IntegrationController extends Controller
         return is_string($path) ? $path : '';
     }
 
-    /**
-     * @phpstan-assert !null $this->accountIdResolver
-     */
+    /** @phpstan-assert !null $this->accountIdResolver */
     private function accountId(): string
     {
         $this->assertAccountResolverBound();
@@ -117,9 +80,7 @@ class IntegrationController extends Controller
         return $this->accountIdResolver->accountId();
     }
 
-    /**
-     * @phpstan-assert !null $this->accountIdResolver
-     */
+    /** @phpstan-assert !null $this->accountIdResolver */
     private function assertAccountResolverBound(): void
     {
         if ($this->accountIdResolver === null) {

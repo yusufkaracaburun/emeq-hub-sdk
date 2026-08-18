@@ -6,19 +6,9 @@ namespace Emeq\HubSdk\Resources;
 
 use Emeq\HubSdk\Exceptions\HubException;
 
-/**
- * One page of an accounting collection.
- *
- * Hub answers collection reads with `{data: [...], next_cursor: "…"}`. Returning
- * the bare list would drop the cursor and make pagination impossible; returning
- * the raw envelope would push the shape onto every caller. This carries both,
- * typed.
- */
 final class AccountingPage
 {
-    /**
-     * @param  list<array<string, mixed>>  $items
-     */
+    /** @param  list<array<string, mixed>>  $items */
     public function __construct(
         public readonly array $items,
         public readonly ?string $nextCursor = null,

@@ -17,9 +17,7 @@ class PutMappingRequest extends Request implements HasBody
 
     protected Method $method = Method::PUT;
 
-    /**
-     * @param  array<string, mixed>  $mapping
-     */
+    /** @param  array<string, mixed>  $mapping */
     public function __construct(
         private readonly array $mapping,
         private readonly string $accountId,
@@ -30,17 +28,13 @@ class PutMappingRequest extends Request implements HasBody
         return '/accounting/mapping';
     }
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     protected function defaultHeaders(): array
     {
         return $this->accountIdHeaders($this->accountId);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     protected function defaultBody(): array
     {
         return $this->mapping;

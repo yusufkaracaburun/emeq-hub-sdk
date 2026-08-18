@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Backlog\Resources;
 
-use Emeq\HubSdk\Backlog\BacklogRepository;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Booking\Resources\BookingResource;
 use Illuminate\Http\Request;
@@ -12,17 +11,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
 use stdClass;
 
-/**
- * One row from {@see BacklogRepository::paginate()}.
- *
- * `status` is the joined backlog state — always present, `not_booked` when no
- * attempt was decided. `booking` is the full ledger row and is null exactly
- * then. A frontend needs both: the first sorts and filters, the second explains.
- *
- * `accounting_changed_at` / `accounting_change_action` are joined the same way
- * `status` is, so a row can render the "changed since booking" marker without
- * reading into `booking`.
- */
 class BacklogDocumentResource extends JsonResource
 {
     public function __construct(private readonly stdClass $document)
@@ -30,9 +18,7 @@ class BacklogDocumentResource extends JsonResource
         parent::__construct($document);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $booking = $this->document->hub_document ?? null;

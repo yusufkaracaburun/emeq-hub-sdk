@@ -178,7 +178,7 @@ it('surfaces only the posted document the bookkeeping changed afterwards', funct
 });
 
 it('composes the accounting-changed filter with a status filter, not replacing it', function (): void {
-    document(['uuid' => 'inv-1']); // not_booked
+    document(['uuid' => 'inv-1']);
     document(['uuid' => 'inv-2']);
     booking('inv-2', HubDocument::STATUS_POSTED, ['accounting_changed_at' => '2026-08-17T09:00:00+00:00']);
 

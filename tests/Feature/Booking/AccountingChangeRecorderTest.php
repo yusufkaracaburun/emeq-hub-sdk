@@ -13,9 +13,7 @@ use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
 use Illuminate\Support\Facades\Schema;
 use Spatie\WebhookClient\Models\WebhookCall;
 
-/**
- * @param  array<string, mixed>  $attributes
- */
+/** @param  array<string, mixed>  $attributes */
 function recorderDocument(array $attributes = []): HubDocument
 {
     return HubDocument::query()->create(array_merge([

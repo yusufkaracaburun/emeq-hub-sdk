@@ -11,9 +11,7 @@ use Throwable;
 
 final class FakeBookableDocuments implements ResolvesBookableDocument
 {
-    /**
-     * @param  array<string, BookableDocument|Throwable>  $map  keyed "module:id"
-     */
+    /** @param  array<string, BookableDocument|Throwable>  $map  keyed "module:id" */
     public function __construct(private array $map = []) {}
 
     public function resolve(string $module, string $id): BookableDocument

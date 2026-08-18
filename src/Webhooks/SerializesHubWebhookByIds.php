@@ -6,21 +6,11 @@ namespace Emeq\HubSdk\Webhooks;
 
 use Spatie\WebhookClient\Models\WebhookCall;
 
-/**
- * Queue serialization for multi-DB consumers: persist only account + call ids,
- * never the WebhookCall Eloquent model (wrong connection after worker reboot).
- *
- * Use on a subclass of {@see ProcessHubWebhookJob}, which owns `$accountId` /
- * `$webhookCallId` and reloads the stripped model in resolveWebhookCall().
- */
 trait SerializesHubWebhookByIds
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function __serialize(): array
     {
-        // Omit `job` — the queue worker rebinds it after unserialize.
         return [
             'accountId' => $this->accountId,
             'webhookCallId' => $this->webhookCallId,
@@ -36,9 +26,7 @@ trait SerializesHubWebhookByIds
         ];
     }
 
-    /**
-     * @param  array<string, mixed>  $data
-     */
+    /** @param  array<string, mixed>  $data */
     public function __unserialize(array $data): void
     {
         $this->accountId = (string) ($data['accountId'] ?? '');

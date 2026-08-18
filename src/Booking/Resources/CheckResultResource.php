@@ -15,12 +15,7 @@ class CheckResultResource extends JsonResource
         parent::__construct($outcome);
     }
 
-    /**
-     * `checked` and `valid` are separate answers: a document that was never
-     * checked is not the same as one that was checked and came back invalid.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $result = $this->outcome->result ?? [];
