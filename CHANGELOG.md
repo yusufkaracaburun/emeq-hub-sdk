@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.25.1] — 2026-08-18
+
+### Fixed
+
+- **The backlog reads a schema without the change columns again.** 0.25.0
+  guarded `PostedDocuments::excluding()` against a consumer that never ran the
+  `accounting_change_*` migration, but three reads in `BacklogRepository` still
+  named those columns unconditionally: the `summary()` count, the `select` and
+  `accounting_changed` filter in `filtered()`, and `latestBookings()`. A
+  consumer on the older schema got `no such column` off the backlog rather than
+  a list.
+
+  All three now ask `AccountingChangeRecorder::marksChanges()`, the same check
+  the recorder and `excluding()` use. Without the columns the backlog lists as
+  it always did, the `accounting_changed` filter returns nothing and its summary
+  counts zero — what `hub:doctor` already told consumers to expect. With the
+  columns present nothing changes.
+
 ## [0.25.0] — 2026-08-18
 
 ### Fixed

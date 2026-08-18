@@ -324,6 +324,64 @@ it('treats a wildcard in the search term as a character, not a pattern', functio
         ->and(backlog()->paginate(['search_term' => 'Acme'])->items())->toHaveCount(1);
 });
 
+it('lists the backlog without the change columns instead of throwing', function (): void {
+    document(['uuid' => 'inv-1']);
+    document(['uuid' => 'inv-2']);
+    booking('inv-1', HubDocument::STATUS_POSTED);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(['accounting_changed_at', 'accounting_change_action', 'accounting_change_event_id']);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    $rows = backlog()->paginate([])->items();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->uuid)->toBe('inv-2');
+});
+
+it('empties the accounting-changed filter instead of throwing when the change columns are missing', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_FAILED);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(['accounting_changed_at', 'accounting_change_action', 'accounting_change_event_id']);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    $rows = backlog()->paginate(['accounting_changed' => 1])->items();
+
+    expect($rows)->toHaveCount(0);
+});
+
+it('zeroes the accounting-changed summary instead of throwing when the change columns are missing', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_FAILED);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(['accounting_changed_at', 'accounting_change_action', 'accounting_change_event_id']);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    expect(backlog()->summary([])->accountingChanged)->toBe(0);
+});
+
+it('reads a null accounting-changed pair off the resource when the change columns are missing', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_REJECTED);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(['accounting_changed_at', 'accounting_change_action', 'accounting_change_event_id']);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    $row = backlog()->paginate([])->items()[0];
+    $resource = (new BacklogDocumentResource($row))->toArray(Request::create('/'));
+
+    expect($resource['accounting_changed_at'])->toBeNull()
+        ->and($resource['accounting_change_action'])->toBeNull();
+});
+
 it('reads the backlog off the connection that holds the ledger', function (): void {
     $this->useLedgerDatabase($this->temporaryDatabase());
     $this->createDocumentsTable('tenant');

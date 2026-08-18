@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Backlog;
 
 use Emeq\HubSdk\Backlog\Contracts\ProvidesBacklogSources;
+use Emeq\HubSdk\Booking\AccountingChangeRecorder;
 use Emeq\HubSdk\Booking\BookingLedger;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
@@ -74,10 +75,12 @@ class BacklogRepository
             }
         }
 
-        $accountingChanged = (int) $this->connection()->query()
-            ->fromSub($this->filtered($params), 'backlog')
-            ->whereNotNull('accounting_changed_at')
-            ->count();
+        $accountingChanged = AccountingChangeRecorder::marksChanges()
+            ? (int) $this->connection()->query()
+                ->fromSub($this->filtered($params), 'backlog')
+                ->whereNotNull('accounting_changed_at')
+                ->count()
+            : 0;
 
         return new BacklogSummary(array_sum($byStatus), $amountTotal, $byStatus, $byModule, $oldestDate, $accountingChanged);
     }
@@ -125,15 +128,22 @@ class BacklogRepository
             static fn (mixed $module): bool => is_string($module),
         ));
 
+        $tracksChanges = AccountingChangeRecorder::marksChanges();
+
+        $select = [
+            ...array_map(static fn (string $column): string => 'documents.'.$column, ProvidesBacklogSources::COLUMNS),
+            DB::raw("COALESCE(bookings.status, '".BacklogStatus::NOT_BOOKED."') as status"),
+        ];
+
+        if ($tracksChanges) {
+            $select[] = 'bookings.accounting_changed_at';
+            $select[] = 'bookings.accounting_change_action';
+        }
+
         $documents = $this->connection()->query()
             ->fromSub($this->sources->bookable($modules), 'documents')
             ->leftJoinSub($this->latestBookings(), 'bookings', 'bookings.external_id', '=', 'documents.uuid')
-            ->select([
-                ...array_map(static fn (string $column): string => 'documents.'.$column, ProvidesBacklogSources::COLUMNS),
-                DB::raw("COALESCE(bookings.status, '".BacklogStatus::NOT_BOOKED."') as status"),
-                'bookings.accounting_changed_at',
-                'bookings.accounting_change_action',
-            ]);
+            ->select($select);
 
         if (is_string($params['search_term'] ?? null) && $params['search_term'] !== '') {
             $term = '%'.self::escapeWildcards($params['search_term']).'%';
@@ -171,7 +181,11 @@ class BacklogRepository
         }
 
         if ($this->wantsAccountingChanged($params)) {
-            $documents->whereNotNull('bookings.accounting_changed_at');
+            if ($tracksChanges) {
+                $documents->whereNotNull('bookings.accounting_changed_at');
+            } else {
+                $documents->whereRaw('1 = 0');
+            }
         }
 
         return $this->filterByStatus($documents, $this->requestedStatuses($params));
@@ -214,14 +228,19 @@ class BacklogRepository
     {
         $table = (new HubDocument)->getTable();
 
+        $select = [
+            $table.'.external_id',
+            $table.'.status',
+        ];
+
+        if (AccountingChangeRecorder::marksChanges()) {
+            $select[] = $table.'.accounting_changed_at';
+            $select[] = $table.'.accounting_change_action';
+        }
+
         return $this->connection()->table($table)
             ->joinSub(HubDocument::currentIds($this->account->accountId()), 'current', 'current.id', '=', $table.'.id')
-            ->select([
-                $table.'.external_id',
-                $table.'.status',
-                $table.'.accounting_changed_at',
-                $table.'.accounting_change_action',
-            ]);
+            ->select($select);
     }
 
     protected function connection(): Connection
