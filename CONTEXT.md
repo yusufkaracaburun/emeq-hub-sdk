@@ -30,6 +30,8 @@ Contracts/   consumer-implemented seams (ResolvesAccountId, ResolvesWebhookAccou
 Resources/   the public call surface — one class per Hub resource, extending Resource
 Http/        Saloon connector, request classes, BFF controller. Package-internal.
 Webhooks/    inbound Hub webhooks: envelope, headers, profile, job
+Booking/     the ledger and the retry policy: booker, runner, outcomes, HubDocument
+Backlog/     "what of mine is not booked yet" — the join over consumer sources
 Support/     framework-light helpers
 Testing/     HubMock + the captured fixtures it serves, for consumer suites
 Exceptions/  HubException and its subclasses
@@ -40,6 +42,11 @@ Rules:
 
 - `Resources/` and `Webhooks/` may use `Support/`, `Exceptions/`, `Contracts/`
   and `Http/`. Nothing depends on `Http/Controllers/`.
+- `Webhooks/` does not reach into `Booking/`. A delivery that has to touch the
+  ledger does it through a listener the service provider registers
+  (`AccountingChangeRecorder` on `HubWebhookReceived`), which also keeps the
+  behaviour when a consumer subclasses `ProcessHubWebhookJob` and forgets
+  `parent::`. `Backlog/` reads `Booking/`; not the other way round.
 - `Support/` stays framework-light — no `Illuminate\Http` imports. Helpers that
   need request data take it as a scalar (`OAuthReturnUrl::fromConfigPath()`
   takes an origin string, not a `Request`).

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Tests;
 
 use Emeq\HubSdk\Backlog\Contracts\ProvidesBacklogSources;
+use Emeq\HubSdk\Booking\AccountingChangeRecorder;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Tests\Doubles\FakeBacklogSources;
@@ -38,6 +39,7 @@ abstract class BookingTestCase extends TestCase
         // The schema answer is cached for the process; the schema itself is
         // rebuilt per test, and one of them drops the trace columns.
         HubDocument::forgetTraceSupport();
+        AccountingChangeRecorder::forgetChangeSupport();
 
         $this->createDocumentsTable();
     }

@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.22.0] — 2026-08-18
+
+Three things this package defined but left to every consumer to build: the
+writer for its own accounting-change columns, a way to watch a booking happen,
+and a switch to shut the webhook endpoint.
+
+Nothing here requires a consumer to change code.
+
+### Added
+
+- **`AccountingChangeRecorder`** — marks a posted ledger row when an
+  `accounting.*.changed` webhook names a document this consumer booked. The
+  three columns it writes (`accounting_changed_at`, `accounting_change_action`,
+  `accounting_change_event_id`) shipped in 0.18.0 with a reader and no writer:
+  `BacklogRepository`'s `accounting_changed` filter, `PostedDocuments::excluding()`
+  and both resources have read them ever since, while each consumer transcribed
+  the join out of `docs/webhooks.md`. That is the same argument `PostedDocuments`
+  ships on — it is account-scoped ledger SQL, and getting the scope wrong is
+  silent.
+
+  Wired as a listener on `HubWebhookReceived`, so a consumer that subclasses
+  `ProcessHubWebhookJob` — every multi-DB one does — keeps the marker without
+  remembering to call `parent::`. Turn it off with
+  `EMEQ_HUB_BOOKING_RECORD_ACCOUNTING_CHANGES=false`; widen or narrow the echo
+  window with `EMEQ_HUB_BOOKING_ECHO_WINDOW_SECONDS` (default 300).
+
+  Suppresses the echo of your own write two ways: `isOwnEcho()`, and proximity
+  to the row's own `booked_at`. The second exists because the first goes quiet
+  in more ways than "a human did this", and a marker that appears on every
+  document you book teaches people to ignore it.
+
+  Provider-agnostic by construction: it reads `entity_id` / `action` off the
+  envelope and never the raw partner payload (ADR-0001). Override `entityKey()`
+  to rescue a provider Hub cannot map an id for.
+
+  A ledger without the three columns is left alone rather than failing the
+  delivery — a consumer that books nothing never published the migration, and a
+  throw there earns five Hub retries over roughly three hours.
+
+- **`DocumentBooked` and `DocumentBookingFailed`**, dispatched by
+  `BookingRunner` for a single booking and for every document in a batch. There
+  was no event on the booking path at all, so observing an outcome meant
+  wrapping the runner — and because the runner hands back no model, wrapping it
+  meant re-finding the record just to name it.
+
+  Both carry `module`, `id`, the `BookingOutcome` and a `subject`.
+  `DocumentBookingFailed` covers outcomes that are not alike: read
+  `$outcome->status` and `$outcome->mayRetry()` rather than treating a 422 like
+  a 503. `check()` dispatches nothing — it books no document.
+
+- **`BookableDocument::$subject`** — an optional third constructor argument
+  carrying the record a document was mapped from onto both events. Untyped:
+  this package knows nothing about consumer models. Existing call sites are
+  unaffected.
+
+- **`HubWebhooksEnabled` middleware and `hub.webhook.enabled`**
+  (`EMEQ_HUB_WEBHOOK_ENABLED`, default `true`). Put it on the webhook route to
+  be able to shut the endpoint for the window in which the code is deployed but
+  `webhook_calls` has not reached every database that has to hold it. Default
+  open, and absent config reads as open, so an existing consumer sees no change.
+
+### Changed
+
+- **`relation.relinked` documented** as a fourth Hub warning code, emitted when
+  a mirrored relation turns out to be gone from the administration. Warnings are
+  passed through unread, so it already reached `$outcome->warnings` without a
+  release — the README and ADR-0004 simply listed three.
+
+- `composer.json` branch alias and the install lines in `README.md` /
+  `docs/agent-prompt.md` said `0.14`; the tagged line is `0.21`.
+
 ## [0.21.0] — 2026-08-17
 
 Hub retired the per-document flag that asked a consumer to decide whether the

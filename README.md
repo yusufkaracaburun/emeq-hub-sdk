@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.14
+composer require emeq/hub-sdk:^0.21
 ```
 
 ```bash
@@ -161,8 +161,13 @@ optional `party.relation_id` pins the resolved relation and skips Hub's
 matching ladder entirely. There is no flag for "create the relation if it does
 not exist" — Hub decides that deterministically and reports what it did in
 `warnings[]` on the posted record (`relation.created`, `relation.matched_by_name`,
-`relation.name_differs`), reachable as `$record->warnings` and, once resolved,
-`$outcome->warnings`.
+`relation.name_differs`, `relation.relinked`), reachable as `$record->warnings`
+and, once resolved, `$outcome->warnings`.
+
+That list is Hub's, not this package's: warnings are passed through unread, so a
+code Hub adds arrives without an SDK release. Treat an unknown `code` as
+something to show rather than something to drop — `relation.relinked` is exactly
+what the previous release would have swallowed.
 
 Rules the ledger encodes, and the reason it exists rather than asking Hub every
 time ([ADR-0003](docs/adr/0003-the-booking-ledger-lives-in-the-consumer.md)):
@@ -287,6 +292,45 @@ without a `status` filter to see them. The summary carries a matching
 `accounting_changed` count, a sibling of `by_status`, and every row exposes
 `accounting_changed_at` (ISO 8601) / `accounting_change_action` directly —
 no need to read into `booking` for the marker.
+
+Nothing to wire for the marker itself: `AccountingChangeRecorder` listens for
+`HubWebhookReceived` and writes those columns when a change event names a
+document this consumer posted. It joins on `external_ref` — the provider's own
+id, which Hub returns when you book and repeats as `entity_id` on the event —
+scoped to the account, and it ignores the echo of your own write so a booking
+does not badge itself seconds later.
+
+```env
+# Off if you write the columns yourself. Off also means the filter stays empty.
+EMEQ_HUB_BOOKING_RECORD_ACCOUNTING_CHANGES=true
+# How long after a booking a change still counts as that write's echo.
+EMEQ_HUB_BOOKING_ECHO_WINDOW_SECONDS=300
+```
+
+A ledger without the three columns — a consumer that books nothing, or one on a
+stub from before 0.18 — is left alone rather than failing the delivery.
+
+### Watching a booking happen
+
+`BookingRunner` announces every attempt, so an activity log or an audit trail is
+written once instead of at each call site:
+
+| Event | When |
+|---|---|
+| `DocumentBooked` | the document reached the bookkeeping |
+| `DocumentBookingFailed` | every other outcome — refused, unauthorised, missing, upstream error, undecided |
+
+Both carry `module`, `id`, the `BookingOutcome`, and whatever your
+`ResolvesBookableDocument` hung on the `BookableDocument` as `subject`:
+
+```php
+return new BookableDocument($this->mapper->toDocument($invoice), subject: $invoice);
+```
+
+Without it a listener has to find and authorise the record a second time just to
+name it. `DocumentBookingFailed` covers outcomes that are not alike — read
+`$outcome->status` and `$outcome->mayRetry()` rather than treating a 422 like a
+503. `check()` announces nothing: it books no document.
 
 ### Configuration
 

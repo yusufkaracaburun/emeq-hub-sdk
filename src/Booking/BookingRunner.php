@@ -6,6 +6,8 @@ namespace Emeq\HubSdk\Booking;
 
 use Closure;
 use Emeq\HubSdk\Booking\Contracts\ResolvesBookableDocument;
+use Emeq\HubSdk\Events\DocumentBooked;
+use Emeq\HubSdk\Events\DocumentBookingFailed;
 use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Exceptions\DocumentNotAuthorized;
@@ -102,11 +104,11 @@ class BookingRunner
         try {
             $document = $this->documents->resolve($module, $id);
         } catch (ModelNotFoundException) {
-            return BookingOutcome::notFound();
+            return $this->announce($module, $id, BookingOutcome::notFound());
         } catch (DocumentNotAuthorized) {
-            return BookingOutcome::notAllowed();
+            return $this->announce($module, $id, BookingOutcome::notAllowed());
         } catch (DocumentNotBookable $e) {
-            return BookingOutcome::refused($e->getMessage());
+            return $this->announce($module, $id, BookingOutcome::refused($e->getMessage()));
         }
 
         try {
@@ -115,14 +117,32 @@ class BookingRunner
                 $withAttachment ? $document->attachments : null,
             );
         } catch (BookingAlreadyInProgress $e) {
-            return BookingOutcome::alreadyInProgress($e->getMessage(), $e->retryAfter);
+            return $this->announce($module, $id, BookingOutcome::alreadyInProgress($e->getMessage(), $e->retryAfter), $document->subject);
         } catch (BookingTemporarilyUnavailable $e) {
-            return BookingOutcome::unavailable($e->getMessage(), $e->retryAfter);
+            return $this->announce($module, $id, BookingOutcome::unavailable($e->getMessage(), $e->retryAfter), $document->subject);
         } catch (HubException $e) {
-            return BookingOutcome::upstreamFailure($e->getMessage());
+            return $this->announce($module, $id, BookingOutcome::upstreamFailure($e->getMessage()), $document->subject);
         }
 
-        return BookingOutcome::from($record);
+        return $this->announce($module, $id, BookingOutcome::from($record), $document->subject);
+    }
+
+    /**
+     * Says what happened, and hands the outcome back so a caller reads as one
+     * expression.
+     *
+     * Fired here rather than in {@see DocumentBooker} because module and id are
+     * what a consumer logs against, and the booker is given a payload without
+     * either. A batch runs through {@see bookOne()}, so it reports per document
+     * and needs nothing of its own.
+     */
+    protected function announce(string $module, string $id, BookingOutcome $outcome, mixed $subject = null): BookingOutcome
+    {
+        event($outcome->booked
+            ? new DocumentBooked($module, $id, $outcome, $subject)
+            : new DocumentBookingFailed($module, $id, $outcome, $subject));
+
+        return $outcome;
     }
 
     /**
