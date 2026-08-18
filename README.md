@@ -146,7 +146,6 @@ use Emeq\HubSdk\Booking\DocumentBooker;
 $record = app(DocumentBooker::class)->book(
     $this->mapper->toDocument($invoice),      // your mapping, your models
     attachments: fn () => [$this->pdf->render($invoice)],
-    createRelation: false,
 );
 
 $outcome = BookingOutcome::from($record);     // booked / refused / needs a human
@@ -156,6 +155,14 @@ Mapping stays in your app: what a sales invoice looks like is your data model.
 Throw `Emeq\HubSdk\Exceptions\DocumentNotBookable` from your mapper for
 documents that can never be sent (a draft, a missing party) — nothing is sent
 and nothing is recorded.
+
+`party.kind` (`company` | `person`) and `party.external_id` are required; an
+optional `party.relation_id` pins the resolved relation and skips Hub's
+matching ladder entirely. There is no flag for "create the relation if it does
+not exist" — Hub decides that deterministically and reports what it did in
+`warnings[]` on the posted record (`relation.created`, `relation.matched_by_name`,
+`relation.name_differs`), reachable as `$record->warnings` and, once resolved,
+`$outcome->warnings`.
 
 Rules the ledger encodes, and the reason it exists rather than asking Hub every
 time ([ADR-0003](docs/adr/0003-the-booking-ledger-lives-in-the-consumer.md)):
@@ -239,7 +246,7 @@ class BookableDocuments implements ResolvesBookableDocument
 ```
 
 ```php
-$outcome = app(BookingRunner::class)->bookOne('invoice', $uuid, createRelation: false);
+$outcome = app(BookingRunner::class)->bookOne('invoice', $uuid);
 $results = app(BookingRunner::class)->book($request->documents());   // stops on its time budget
 $checks  = app(BookingRunner::class)->check($request->documents());  // free, catches most refusals
 ```

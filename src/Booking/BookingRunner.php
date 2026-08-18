@@ -55,14 +55,14 @@ class BookingRunner
      * @param  list<array{module: string, id: string}>  $requested
      * @return list<BatchBookingResult>
      */
-    public function book(array $requested, bool $createRelation = false, bool $withAttachment = true): array
+    public function book(array $requested, bool $withAttachment = true): array
     {
         return $this->withinBudget(
             $requested,
             fn (string $module, string $id): BatchBookingResult => new BatchBookingResult(
                 $module,
                 $id,
-                $this->bookOne($module, $id, $createRelation, $withAttachment),
+                $this->bookOne($module, $id, $withAttachment),
             ),
         );
     }
@@ -97,7 +97,7 @@ class BookingRunner
         }
     }
 
-    public function bookOne(string $module, string $id, bool $createRelation = false, bool $withAttachment = true): BookingOutcome
+    public function bookOne(string $module, string $id, bool $withAttachment = true): BookingOutcome
     {
         try {
             $document = $this->documents->resolve($module, $id);
@@ -113,7 +113,6 @@ class BookingRunner
             $record = $this->booker->book(
                 $document->document,
                 $withAttachment ? $document->attachments : null,
-                $createRelation,
             );
         } catch (BookingAlreadyInProgress $e) {
             return BookingOutcome::alreadyInProgress($e->getMessage(), $e->retryAfter);

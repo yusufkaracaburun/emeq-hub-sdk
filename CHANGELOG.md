@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.21.0] — 2026-08-17
+
+Hub retired the per-document flag that asked a consumer to decide whether the
+bookkeeping should create a relation it does not know yet — that decision now
+runs a deterministic ladder on Hub's side. This release drops the flag and
+carries the report of what Hub did instead.
+
+### Removed
+
+- **BREAKING: `$createRelation` off `DocumentBooker::book()` and
+  `BookingRunner::book()` / `bookOne()`**, and the `party.create_if_missing`
+  it used to set. Hub no longer reads the field: relation resolution is now a
+  fixed ladder (mirror, chamber of commerce, VAT number, name, create) that
+  runs the same way whether a caller asked for it or not — see the Hub's
+  `relation-resolution-ladder` decision. Drop the argument at every call
+  site; the pin that keeps a retry sending the same relation key
+  (`party.external_id` off the ledger row) is unaffected and still applies.
+
+### Added
+
+- **`warnings` on the ledger record and on `BookingOutcome`.** The checkbox
+  that used to ask permission for creating a relation is gone, so Hub reports
+  after the fact what it did instead: `relation.created`,
+  `relation.matched_by_name`, `relation.name_differs`. Read via
+  `$record->warnings` straight off `DocumentBooker::book()`, or
+  `$outcome->warnings` off `BookingRunner::bookOne()`; both also reach
+  `BookingResource` and therefore `BatchResultResource` /
+  `BacklogDocumentResource`'s nested `booking`. Not a column: only the
+  attempt that booked the document can report them, so a row read back later
+  carries none rather than a stale answer.
+
+- **`HubMock::createDocumentWithWarnings()`** for a consumer's own tests. Not
+  a live capture — Hub had not shipped `warnings[]` on this endpoint when this
+  release was cut — so it is shaped from the Hub's own decision doc rather
+  than a redacted response. Swap it for a real capture once Hub ships the
+  field.
+
+### Changed
+
+- **BREAKING: `party.kind` (`company` | `person`) and `party.external_id`
+  are now required on every booked document; `party.relation_id` is a new
+  optional pin that skips Hub's matching ladder outright.** `kind` types the
+  party rather than flagging behaviour — it says which keys exist to match
+  on, not what Hub may do. A `company` needs a chamber-of-commerce or VAT
+  number or Hub refuses the document; a `person` has neither and leans on the
+  mirror alone. Update mappers, test helpers and fixtures that build a
+  `party` block accordingly.
+
 ## [0.20.0] — 2026-08-17
 
 A failed booking now names the Hub request that decided it, and Hub decides

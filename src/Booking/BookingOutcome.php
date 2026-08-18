@@ -14,6 +14,10 @@ namespace Emeq\HubSdk\Booking;
  */
 class BookingOutcome
 {
+    /**
+     * @param  list<array<string, mixed>>  $warnings  what Hub did to the relation while booking — empty
+     *                                                unless `$booked`, since only a posted document writes one
+     */
     final private function __construct(
         public readonly bool $booked,
         public readonly int $status,
@@ -22,6 +26,7 @@ class BookingOutcome
         public readonly bool $needsManualCheck = false,
         public readonly ?string $reason = null,
         public readonly ?int $retryAfter = null,
+        public readonly array $warnings = [],
     ) {}
 
     /**
@@ -46,7 +51,7 @@ class BookingOutcome
 
     public static function booked(HubDocument $record): static
     {
-        return new static(true, 200, null, $record);
+        return new static(true, 200, null, $record, warnings: $record->warnings);
     }
 
     public static function refused(string $message, ?HubDocument $record = null): static

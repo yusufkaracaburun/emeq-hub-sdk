@@ -73,9 +73,10 @@ function sampleDocument(string $externalId, string $issueDate): array
         'issue_date' => $issueDate,
         'party' => [
             'role' => 'debtor',
+            'kind' => 'company',
             'name' => getenv('EMEQ_CAPTURE_PARTY_NAME') ?: 'Fixture Capture B.V.',
             'vat_number' => getenv('EMEQ_CAPTURE_PARTY_VAT') ?: 'NL000000000B01',
-            'external_id' => getenv('EMEQ_CAPTURE_PARTY_ID') ?: null,
+            'external_id' => getenv('EMEQ_CAPTURE_PARTY_ID') ?: 'party-'.$externalId,
         ],
         'lines' => [
             [

@@ -1,0 +1,17 @@
+{
+    "provider": "exact",
+    "status": "posted",
+    "external_id": "invoice-1",
+    "external_ref": "55555555-5555-4555-8555-555555555555",
+    "external_number": 26800003,
+    "warnings": [
+        {
+            "code": "relation.matched_by_name",
+            "message": "Relatie 'Fixture Capture B.V.' is herkend op naam in plaats van KvK- of btw-nummer.",
+            "context": {
+                "relation_id": "77777777-7777-4777-8777-777777777777",
+                "matched_name": "Fixture Capture B.V."
+            }
+        }
+    ]
+}

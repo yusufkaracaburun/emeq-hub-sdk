@@ -101,6 +101,20 @@ final class HubMock
     }
 
     /**
+     * A booked document where the relation ladder fell back to a name match
+     * instead of the mirror or a KvK/VAT lookup.
+     *
+     * Not a live capture: Hub's ladder had not reached production yet when this
+     * fixture was written. Code, message and context keys are copied from the
+     * Hub's own emitter (`ExactRelationResolver`, `BookingWarnings`) — replace
+     * with a real capture once the ladder is deployed.
+     */
+    public static function createDocumentWithWarnings(): MockResponse
+    {
+        return MockResponse::make(self::fixture('create-document-with-warnings'), 201);
+    }
+
+    /**
      * Reports how many records the provider pulled — the shape says nothing
      * about which entities were touched.
      */
