@@ -14,7 +14,9 @@
         "gl_accounts": {
             "omzet": "89001",
             "kosten": "40004",
-            "_default": "40004"
+            "_default": "40004",
+            "sales_default": "89001",
+            "purchase_default": "40004"
         }
     }
 }

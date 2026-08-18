@@ -104,10 +104,12 @@ final class HubMock
      * A booked document where the relation ladder fell back to a name match
      * instead of the mirror or a KvK/VAT lookup.
      *
-     * Not a live capture: Hub's ladder had not reached production yet when this
-     * fixture was written. Code, message and context keys are copied from the
-     * Hub's own emitter (`ExactRelationResolver`, `BookingWarnings`) — replace
-     * with a real capture once the ladder is deployed.
+     * Assembled rather than captured whole: the envelope comes from the live
+     * `create-document` capture, the warning from Hub's own emitter
+     * (`ExactRelationResolver`, `BookingWarnings`) and the contract test that
+     * pins it (`StoreDocumentTest`, `warnings.0.code` + `context.relation_id`).
+     * Capturing it live means booking a real invoice on a real administration
+     * for one GUID, so this stays assembled on purpose.
      */
     public static function createDocumentWithWarnings(): MockResponse
     {
@@ -127,7 +129,9 @@ final class HubMock
      * Validation answers 200 either way; `valid` carries the verdict.
      *
      * The clean payload still holds one `info` finding — findings are not the
-     * same thing as failure. The failing payload mixes `error` and `warning`.
+     * same thing as failure. The failing payload mixes `error`, a `warning`
+     * that blocks the booking and an `info` that does not, so a consumer
+     * reading `severity` instead of `blocking` gets both wrong.
      */
     public static function validateDocument(bool $valid = true): MockResponse
     {

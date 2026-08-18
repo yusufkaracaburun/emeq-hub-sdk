@@ -7,6 +7,7 @@ use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\NotFoundException;
 use Emeq\HubSdk\Exceptions\ValidationException;
 use Emeq\HubSdk\Hub;
+use Emeq\HubSdk\Resources\Finding;
 use Emeq\HubSdk\Testing\HubMock;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
@@ -75,6 +76,23 @@ it('distinguishes a clean validation from one with findings', function (): void 
     expect($failing['valid'])->toBeFalse()
         ->and($failing['summary']['errors'])->toBeGreaterThan(0)
         ->and(array_column($failing['findings'], 'severity'))->toContain('error');
+});
+
+it('carries the blocking flag Hub decides, not one derived from severity', function (): void {
+    $failing = mockedBody(HubMock::validateDocument(valid: false));
+
+    $blocking = [];
+
+    foreach ($failing['findings'] as $finding) {
+        $blocking[$finding['code']] = Finding::isBlocking($finding);
+    }
+
+    // Captured live: `exact.vat_code.unmapped` is a `warning` that refuses the
+    // booking anyway, and `exact.relation.new` is an `info` that does not.
+    // Severity does not answer this question; `blocking` does.
+    expect($blocking['exact.vat_code.unmapped'])->toBeTrue()
+        ->and($blocking['exact.relation.new'])->toBeFalse()
+        ->and($failing['summary']['blocking'])->toBe(2);
 });
 
 it('books a document and replays the same key onto the same booking', function (): void {

@@ -542,10 +542,11 @@ What the captures show, and what a hand-written mock tends to get wrong:
 - `validateDocument()` answers `200` either way — read `valid`, never the HTTP
   status. A clean document still returns findings: a matched relation comes back
   as `info`, so `findings === []` is not the success test.
-- **`validate-clean.json` and `validate-findings.json` predate `blocking`.**
-  Both were captured before Hub started sending the field, so their findings
-  carry none — exercising `Finding::isBlocking()`'s "unknown" answer, not its
-  known one. A fresh capture follows once Hub ships the field.
+- **Severity does not decide whether a finding refuses the booking; `blocking`
+  does.** The captured `validate-findings.json` holds an `exact.vat_code.unmapped`
+  of severity `warning` that blocks, next to an `exact.relation.new` of severity
+  `info` that does not — the relation is created during the booking. `summary`
+  counts them separately (`errors`, `warnings`, `infos`, `blocking`).
 - `referenceData()` is grouped by kind — `{gl: [...], vat: [...], journal: [...]}`.
   Items carry no `kind` of their own, and `attrs` is `[]` when empty but an
   object when filled.

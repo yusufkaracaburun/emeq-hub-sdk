@@ -3,10 +3,10 @@
 Which `/v1/*` endpoints of emeq-hub this SDK wraps, and which it does not yet.
 This doubles as a progress doc: every ⬜ row is backlog.
 
-**As of** 2026-08-18 · **Hub** `adc5045` · **SDK** `0.22.0`
+**As of** 2026-08-18 · **Hub** `9c1561e` · **SDK** `0.23.0`
 
-Re-checked against Hub `adc5045`: no `/v1` route has been added or removed since
-the previous stamp, so every count below still holds. What changed in that window
+Re-checked against Hub `9c1561e` — the deployed relation ladder: no `/v1` route
+has been added or removed since the previous stamp, so every count below still holds. What changed in that window
 is behaviour behind routes already listed — the relation ladder on
 `POST /accounting/documents`, `retryable` in the error envelope, and full
 skiptoken paging on the mirror reads. Hub also grew a signed, non-`/v1` surface

@@ -3,12 +3,14 @@
     "summary": {
         "errors": 0,
         "warnings": 0,
-        "infos": 1
+        "infos": 1,
+        "blocking": 0
     },
     "findings": [
         {
             "code": "exact.relation.matched",
             "severity": "info",
+            "blocking": false,
             "path": "party",
             "message": "Afnemer is herkend als bestaande relatie 'Voorbeeld Debiteur B.V.' in de administratie — de boeking komt daarop te staan.",
             "current": "Voorbeeld Debiteur B.V.",

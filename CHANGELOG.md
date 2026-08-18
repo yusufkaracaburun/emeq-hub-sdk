@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.23.0] — 2026-08-18
+
+Hub's relation ladder is live, so the fixtures this package ships as its test
+double were re-captured against it. No source change — but a consumer testing
+against `HubMock` was testing against a Hub that no longer exists.
+
+### Changed
+
+- **`validate-clean.json` and `validate-findings.json` re-captured.** Both now
+  carry `blocking` on every finding and in `summary`, the field
+  `Finding::isBlocking()` was written for in 0.20.0 and had no fixture to read.
+  The failing payload teaches what severity cannot: `exact.vat_code.unmapped` is
+  a `warning` that refuses the booking, `exact.relation.new` is an `info` that
+  does not.
+
+- **`exact.relation.new` flipped from `warning` to `info`.** The old fixture said
+  *"de boeking wordt geweigerd — voeg de relatie toe of laat automatisch
+  aanmaken inschakelen"*, which is the world before the ladder: a booking with an
+  unknown relation was refused unless a flag said otherwise. That flag went in
+  0.21.0. Hub now creates the relation during the booking and says so.
+
+- **`mapping.json` carries `gl_accounts.sales_default` and `purchase_default`**
+  next to `_default`. The SDK passes mapping through untouched; the fixture was
+  simply older than the keys.
+
+### Added
+
+- A `HubMock` test that pins the blocking flag Hub decides — the known answer of
+  `Finding::isBlocking()`, which until now only had its "unknown" answer covered.
+
 ## [0.22.0] — 2026-08-18
 
 Three things this package defined but left to every consumer to build: the
