@@ -69,7 +69,7 @@ class DocumentBooker
     ): HubDocument {
         $record = HubDocument::forBooking($externalId, $this->account->accountId());
 
-        if ($record->exists && $record->status === HubDocument::STATUS_POSTED) {
+        if ($record->exists && $record->status === HubDocument::STATUS_POSTED && ! $record->wasDeletedFromAccounting()) {
             return $record;
         }
 
@@ -100,7 +100,7 @@ class DocumentBooker
         }
 
         try {
-            $result = $this->hub->accounting()->createDocument($document, $externalId);
+            $result = $this->hub->accounting()->createDocument($document, $this->idempotencyKey($record, $externalId));
         } catch (RateLimitException|ServerException $e) {
             throw new BookingTemporarilyUnavailable($e->getMessage(), $e->retryAfter, $e);
         } catch (HubException $e) {
@@ -142,6 +142,7 @@ class DocumentBooker
             'error_message' => null,
             'request_id' => null,
             'category' => null,
+            ...HubDocument::clearedAccountingChange(),
         ]);
 
         $record->warnings = self::parseWarnings($result['warnings'] ?? null);
@@ -234,6 +235,7 @@ class DocumentBooker
             'error_message' => null,
             'request_id' => null,
             'category' => null,
+            ...HubDocument::clearedAccountingChange(),
         ]))->save();
 
         return $winner;
@@ -272,6 +274,24 @@ class DocumentBooker
         }
 
         return (string) $externalId;
+    }
+
+    /**
+     * A document the bookkeeping deleted travels under a key of its own, or Hub
+     * replays the answer it gave the first send and nothing reaches the
+     * bookkeeping. The key is derived from the deletion, so a retry of the same
+     * re-send still carries the key that first attempt used.
+     */
+    protected function idempotencyKey(HubDocument $record, string $externalId): string
+    {
+        if (! $record->wasDeletedFromAccounting()) {
+            return $externalId;
+        }
+
+        $deletion = $record->accounting_change_event_id
+            ?? (string) $record->accounting_changed_at?->getTimestamp();
+
+        return $deletion === '' ? $externalId : $externalId.':'.$deletion;
     }
 
     protected function lock(string $externalId): Lock

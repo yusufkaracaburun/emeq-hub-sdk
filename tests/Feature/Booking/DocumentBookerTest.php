@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Emeq\HubSdk\Booking\AccountingChangeRecorder;
 use Emeq\HubSdk\Booking\DocumentBooker;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
@@ -495,4 +496,103 @@ it('always leaves a message on the row, so Hub keeps the last word', function ()
 
     expect($record->error_message)->toBe('mapping_failed')
         ->and($record->error_message)->not->toBe('');
+});
+
+function deletedInAccounting(array $overrides = []): HubDocument
+{
+    return HubDocument::query()->create(array_merge([
+        'account_id' => 'tenant-1',
+        'type' => 'sales_invoice',
+        'external_id' => 'inv-1',
+        'status' => HubDocument::STATUS_POSTED,
+        'external_ref' => '11111111-1111-4111-8111-111111111111',
+        'external_number' => '26800001',
+        'booked_at' => Carbon::parse('2026-08-18 09:00:00'),
+        'accounting_changed_at' => Carbon::parse('2026-08-18 14:00:00'),
+        'accounting_change_action' => 'deleted',
+        'accounting_change_event_id' => 'evt-del-1',
+    ], $overrides));
+}
+
+it('sends a document the bookkeeping threw away again', function (): void {
+    deletedInAccounting();
+
+    $mock = mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($record->external_ref)->toBe('55555555-5555-4555-8555-555555555555')
+        ->and($record->external_number)->toBe('26800003');
+
+    $mock->assertSent(CreateDocumentRequest::class);
+});
+
+it('gives the second send a key of its own, so Hub cannot replay the first answer', function (): void {
+    deletedInAccounting();
+
+    $mock = mockHub(HubMock::createDocument());
+
+    booker()->book(canonicalDocument());
+
+    $mock->assertSent(function (CreateDocumentRequest $request): bool {
+        return $request->headers()->get('Idempotency-Key') === 'inv-1:evt-del-1';
+    });
+});
+
+it('holds the same key across a retry of one re-send', function (): void {
+    deletedInAccounting(['accounting_change_event_id' => null]);
+
+    $first = mockHub(hubError('mapping_failed'));
+    booker()->book(canonicalDocument());
+    $key = $first->getLastRequest()->headers()->get('Idempotency-Key');
+
+    $second = mockHub(hubError('mapping_failed'));
+    booker()->book(canonicalDocument());
+
+    expect($second->getLastRequest()->headers()->get('Idempotency-Key'))->toBe($key)
+        ->and($key)->not->toBe('inv-1');
+});
+
+it('forgets what the bookkeeping did once the document is booked again', function (): void {
+    deletedInAccounting();
+
+    mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->refresh()->accounting_changed_at)->toBeNull()
+        ->and($record->accounting_change_action)->toBeNull()
+        ->and($record->accounting_change_event_id)->toBeNull();
+});
+
+it('will not resend a document the bookkeeping only edited', function (): void {
+    deletedInAccounting(['accounting_change_action' => 'updated']);
+
+    $mock = mockHub(HubMock::createDocument());
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->external_number)->toBe('26800001');
+    $mock->assertNothingSent();
+});
+
+it('books a deleted document again against a ledger without the change columns', function (): void {
+    HubDocument::query()->create([
+        'account_id' => 'tenant-1',
+        'type' => 'sales_invoice',
+        'external_id' => 'inv-1',
+        'status' => HubDocument::STATUS_POSTED,
+        'external_number' => '26800001',
+    ]);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(HubDocument::CHANGE_COLUMNS);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    $mock = mockHub(HubMock::createDocument());
+
+    expect(booker()->book(canonicalDocument())->external_number)->toBe('26800001');
+    $mock->assertNothingSent();
 });

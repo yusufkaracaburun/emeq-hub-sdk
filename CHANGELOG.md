@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.26.0] — 2026-08-18
+
+### Fixed
+
+- **A document the bookkeeping deleted can be booked again.**
+  `DocumentBooker::attemptBooking()` returned any row that already read
+  `posted` without contacting Hub. Since 0.25.0 the backlog hands a deleted
+  document back on purpose, so the consumer offered a Book action that reported
+  success and carried the *first* booking's `external_number` — nothing reached
+  the bookkeeping and the row kept its `accounting_change_action = deleted`.
+
+  The short circuit now asks `HubDocument::wasDeletedFromAccounting()`. A
+  document the bookkeeping only edited is still never resent.
+
+- **A re-sent document travels under a key of its own.** The
+  `Idempotency-Key` was the document's `external_id`, so a second send within
+  Hub's retention window replayed the first answer instead of reaching
+  `AccountingSyncRunner`, which has handled a vanished upstream entity since it
+  learned to probe. After a deletion the key becomes
+  `{external_id}:{accounting_change_event_id}` — derived from the deletion, so a
+  retry of the same re-send still carries the key the first attempt used, and
+  falls back to the deletion's timestamp when Hub sent no event id.
+
+- **A fresh posting wipes what the bookkeeping did.** `accounting_changed_at`,
+  `accounting_change_action` and `accounting_change_event_id` are cleared when a
+  document reaches `posted`, in `store()` and in `mergeWithWinner()`. Without
+  this the row stayed marked as deleted after a successful re-book, so it kept
+  its badge and stayed in the `accounting_changed` tab. Left out on a schema
+  that never learned the columns.
+
 ## [0.25.1] — 2026-08-18
 
 ### Fixed

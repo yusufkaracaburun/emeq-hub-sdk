@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Booking;
 
+use Emeq\HubSdk\Webhooks\HubWebhookAction;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
@@ -120,6 +121,29 @@ class HubDocument extends Model
     public static function forgetTraceSupport(): void
     {
         self::$tracesRequests = [];
+    }
+
+    /**
+     * Gone from the bookkeeping after we put it there. The row stays `posted`
+     * because that is what happened; what the bookkeeping did with it after is
+     * a separate fact, and only this one reopens the document for booking.
+     */
+    public function wasDeletedFromAccounting(): bool
+    {
+        return $this->accounting_change_action === HubWebhookAction::DELETED->value;
+    }
+
+    /**
+     * What a fresh posting leaves behind: nothing. The columns are absent on a
+     * ledger that never learned about them, and are then left out.
+     *
+     * @return array<string, null>
+     */
+    public static function clearedAccountingChange(): array
+    {
+        return AccountingChangeRecorder::marksChanges()
+            ? array_fill_keys(self::CHANGE_COLUMNS, null)
+            : [];
     }
 
     public static function schemaKey(): string
