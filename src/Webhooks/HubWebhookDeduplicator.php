@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Webhooks;
 
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
+use Emeq\HubSdk\Support\HubLocks;
 use Illuminate\Contracts\Cache\Lock;
-use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use Spatie\WebhookClient\Models\WebhookCall;
 
 class HubWebhookDeduplicator
@@ -37,20 +35,12 @@ class HubWebhookDeduplicator
     /** @throws MissingConfigurationException when the store cannot lock */
     public function lock(string $eventId): Lock
     {
-        $configured = Config::get('hub.webhook.lock_store');
-        $name = is_string($configured) && $configured !== '' ? $configured : null;
+        return HubLocks::webhookStore()->lock($this->lockKey($eventId), $this->lockSeconds());
+    }
 
-        $store = Cache::store($name)->getStore();
-
-        if (! $store instanceof LockProvider) {
-            $default = Config::get('cache.default');
-
-            throw MissingConfigurationException::webhookLockStoreNotLockable(
-                $name ?? (is_string($default) ? $default : 'default'),
-            );
-        }
-
-        return $store->lock($this->lockKey($eventId), 30);
+    public function lockSeconds(): int
+    {
+        return HubLocks::webhookSeconds();
     }
 
     public function alreadyProcessed(string $eventId, int $currentId): bool

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Http;
 
 use Emeq\HubSdk\Exceptions\HubException;
+use Illuminate\Support\Carbon;
 use Saloon\Http\Response;
 use Throwable;
 
@@ -24,11 +25,27 @@ final class HubErrorResponse
     {
         $header = $response->header('Retry-After');
 
-        if (! is_string($header) || ! ctype_digit(mb_trim($header))) {
+        if (! is_string($header)) {
             return null;
         }
 
-        return (int) mb_trim($header);
+        $header = mb_trim($header);
+
+        if ($header === '') {
+            return null;
+        }
+
+        if (ctype_digit($header)) {
+            return (int) $header;
+        }
+
+        $at = strtotime($header);
+
+        if ($at === false) {
+            return null;
+        }
+
+        return max(0, $at - Carbon::now()->getTimestamp());
     }
 
     /** @return array<string, mixed> */

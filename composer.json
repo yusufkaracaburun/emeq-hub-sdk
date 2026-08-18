@@ -73,7 +73,7 @@
             }
         },
         "branch-alias": {
-            "dev-master": "0.21.x-dev"
+            "dev-master": "0.24.x-dev"
         }
     },
     "minimum-stability": "dev",

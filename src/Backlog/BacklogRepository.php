@@ -9,6 +9,7 @@ use Emeq\HubSdk\Booking\BookingLedger;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,8 @@ class BacklogRepository
     public const SORTS = ['date', 'number', 'amount', 'party'];
 
     public const MAX_PAGE_LENGTH = 200;
+
+    private const LIKE_ESCAPE = '!';
 
     public function __construct(
         protected readonly ProvidesBacklogSources $sources,
@@ -44,7 +47,7 @@ class BacklogRepository
     /** @param  array<string, mixed>  $params */
     public function summary(array $params): BacklogSummary
     {
-        $groups = DB::query()
+        $groups = $this->connection()->query()
             ->fromSub($this->filtered($params), 'backlog')
             ->selectRaw('module, status, COUNT(*) as documents, SUM(amount) as amount, MIN(date) as oldest_date')
             ->groupBy('module', 'status')
@@ -71,7 +74,7 @@ class BacklogRepository
             }
         }
 
-        $accountingChanged = (int) DB::query()
+        $accountingChanged = (int) $this->connection()->query()
             ->fromSub($this->filtered($params), 'backlog')
             ->whereNotNull('accounting_changed_at')
             ->count();
@@ -122,7 +125,7 @@ class BacklogRepository
             static fn (mixed $module): bool => is_string($module),
         ));
 
-        $documents = DB::query()
+        $documents = $this->connection()->query()
             ->fromSub($this->sources->bookable($modules), 'documents')
             ->leftJoinSub($this->latestBookings(), 'bookings', 'bookings.external_id', '=', 'documents.uuid')
             ->select([
@@ -133,9 +136,11 @@ class BacklogRepository
             ]);
 
         if (is_string($params['search_term'] ?? null) && $params['search_term'] !== '') {
-            $term = '%'.$params['search_term'].'%';
+            $term = '%'.self::escapeWildcards($params['search_term']).'%';
             $documents->where(function (Builder $query) use ($term): void {
-                $query->where('number', 'like', $term)->orWhere('party', 'like', $term);
+                $query
+                    ->whereRaw("number like ? escape '".self::LIKE_ESCAPE."'", [$term])
+                    ->orWhereRaw("party like ? escape '".self::LIKE_ESCAPE."'", [$term]);
             });
         }
 
@@ -172,6 +177,13 @@ class BacklogRepository
         return $this->filterByStatus($documents, $this->requestedStatuses($params));
     }
 
+    private static function escapeWildcards(string $term): string
+    {
+        $escape = self::LIKE_ESCAPE;
+
+        return str_replace([$escape, '%', '_'], [$escape.$escape, $escape.'%', $escape.'_'], $term);
+    }
+
     /** @param  array<string, mixed>  $params */
     protected function wantsAccountingChanged(array $params): bool
     {
@@ -200,23 +212,21 @@ class BacklogRepository
 
     protected function latestBookings(): Builder
     {
-        $ledger = new HubDocument;
-        $table = $ledger->getTable();
-        $connection = DB::connection($ledger->getConnectionName());
+        $table = (new HubDocument)->getTable();
 
-        $latest = $connection->table($table)
-            ->selectRaw('MAX(id) as id')
-            ->where('account_id', $this->account->accountId())
-            ->groupBy('external_id');
-
-        return $connection->table($table)
-            ->joinSub($latest, 'latest', 'latest.id', '=', $table.'.id')
+        return $this->connection()->table($table)
+            ->joinSub(HubDocument::currentIds($this->account->accountId()), 'current', 'current.id', '=', $table.'.id')
             ->select([
                 $table.'.external_id',
                 $table.'.status',
                 $table.'.accounting_changed_at',
                 $table.'.accounting_change_action',
             ]);
+    }
+
+    protected function connection(): Connection
+    {
+        return DB::connection((new HubDocument)->getConnectionName());
     }
 
     /** @param  array<string, mixed>  $params */

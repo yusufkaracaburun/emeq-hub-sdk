@@ -41,7 +41,10 @@ final class FakeBacklogSources implements ProvidesBacklogSources
 
     private function query(string $module): Builder
     {
-        return DB::table(self::TABLE)
+        $connection = config('hub.booking.connection');
+
+        return DB::connection(is_string($connection) && $connection !== '' ? $connection : null)
+            ->table(self::TABLE)
             ->where('module', $module)
             ->select(ProvidesBacklogSources::COLUMNS)
             ->whereNotExists($this->posted->excluding(self::TABLE.'.uuid'));

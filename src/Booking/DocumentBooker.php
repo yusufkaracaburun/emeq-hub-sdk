@@ -9,16 +9,13 @@ use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Exceptions\BookingAlreadyInProgress;
 use Emeq\HubSdk\Exceptions\BookingTemporarilyUnavailable;
 use Emeq\HubSdk\Exceptions\HubException;
-use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Exceptions\RateLimitException;
 use Emeq\HubSdk\Exceptions\ServerException;
 use Emeq\HubSdk\Hub;
+use Emeq\HubSdk\Support\HubLocks;
 use Illuminate\Contracts\Cache\Lock;
-use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use InvalidArgumentException;
 use Throwable;
 
@@ -279,35 +276,12 @@ class DocumentBooker
 
     protected function lock(string $externalId): Lock
     {
-        $configured = Config::get('hub.booking.lock_store');
-        $name = is_string($configured) && $configured !== '' ? $configured : null;
-
-        $store = Cache::store($name)->getStore();
-
-        if (! $store instanceof LockProvider) {
-            $default = Config::get('cache.default');
-
-            throw MissingConfigurationException::bookingLockStoreNotLockable(
-                $name ?? (is_string($default) ? $default : 'default'),
-            );
-        }
-
-        return $store->lock($this->lockKey($externalId), $this->lockSeconds());
+        return HubLocks::bookingStore()->lock($this->lockKey($externalId), $this->lockSeconds());
     }
 
     protected function lockSeconds(): int
     {
-        $configured = Config::get('hub.booking.lock_seconds');
-        $seconds = is_numeric($configured) ? (int) $configured : 40;
-
-        $timeout = Config::get('hub.timeout');
-        $timeout = is_numeric($timeout) ? (int) $timeout : 30;
-
-        if ($seconds <= $timeout) {
-            throw MissingConfigurationException::bookingLockShorterThanTimeout($seconds, $timeout);
-        }
-
-        return $seconds;
+        return HubLocks::bookingSeconds();
     }
 
     protected function lockKey(string $externalId): string

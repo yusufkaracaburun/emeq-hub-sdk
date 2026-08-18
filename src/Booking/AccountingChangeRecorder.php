@@ -15,7 +15,8 @@ use Throwable;
 
 class AccountingChangeRecorder
 {
-    protected static ?bool $marksChanges = null;
+    /** @var array<string, bool> */
+    protected static array $marksChanges = [];
 
     /** @param  int  $echoWindowSeconds  how long after a write a change still counts as its echo */
     public function __construct(protected readonly int $echoWindowSeconds = 300) {}
@@ -132,16 +133,12 @@ class AccountingChangeRecorder
     {
         $model = new HubDocument;
 
-        return static::$marksChanges ??= Schema::connection($model->getConnectionName())
-            ->hasColumns($model->getTable(), [
-                'accounting_changed_at',
-                'accounting_change_action',
-                'accounting_change_event_id',
-            ]);
+        return static::$marksChanges[HubDocument::schemaKey()] ??= Schema::connection($model->getConnectionName())
+            ->hasColumns($model->getTable(), HubDocument::CHANGE_COLUMNS);
     }
 
     public static function forgetChangeSupport(): void
     {
-        static::$marksChanges = null;
+        static::$marksChanges = [];
     }
 }

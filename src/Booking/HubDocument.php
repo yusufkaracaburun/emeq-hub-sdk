@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Booking;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -34,6 +36,13 @@ class HubDocument extends Model
     /** @var list<string> */
     public const TRACE_COLUMNS = ['request_id', 'category'];
 
+    /** @var list<string> */
+    public const CHANGE_COLUMNS = [
+        'accounting_changed_at',
+        'accounting_change_action',
+        'accounting_change_event_id',
+    ];
+
     public const STATUS_POSTED = 'posted';
 
     public const STATUS_REJECTED = 'rejected';
@@ -42,9 +51,10 @@ class HubDocument extends Model
 
     public const STATUS_UNKNOWN = 'unknown';
 
-    private const POSTED_FIRST = 'CASE WHEN status = ? THEN 0 ELSE 1 END';
+    private const CURRENT_ID = 'COALESCE(MAX(CASE WHEN status = ? THEN id END), MAX(id))';
 
-    private static ?bool $tracesRequests = null;
+    /** @var array<string, bool> */
+    private static array $tracesRequests = [];
 
     protected $table = 'hub_documents';
 
@@ -103,13 +113,31 @@ class HubDocument extends Model
     {
         $model = new self;
 
-        return self::$tracesRequests ??= Schema::connection($model->getConnectionName())
+        return self::$tracesRequests[self::schemaKey()] ??= Schema::connection($model->getConnectionName())
             ->hasColumns($model->getTable(), self::TRACE_COLUMNS);
     }
 
     public static function forgetTraceSupport(): void
     {
-        self::$tracesRequests = null;
+        self::$tracesRequests = [];
+    }
+
+    public static function schemaKey(): string
+    {
+        $connection = DB::connection((new self)->getConnectionName());
+
+        return $connection->getName().'@'.$connection->getDatabaseName();
+    }
+
+    public static function currentIds(string $accountId): QueryBuilder
+    {
+        $model = new self;
+
+        return DB::connection($model->getConnectionName())
+            ->table($model->getTable())
+            ->selectRaw(self::CURRENT_ID.' as id', [self::STATUS_POSTED])
+            ->where('account_id', $accountId)
+            ->groupBy('external_id');
     }
 
     /**
@@ -118,17 +146,20 @@ class HubDocument extends Model
      */
     public static function forExternalIds(array $externalIds, string $accountId): Collection
     {
+        $externalIds = array_values(array_filter($externalIds));
+
+        if ($externalIds === []) {
+            return new Collection;
+        }
+
         $documents = static::query()
-            ->where('account_id', $accountId)
-            ->whereIn('external_id', array_filter($externalIds))
-            ->orderByRaw(self::POSTED_FIRST, [self::STATUS_POSTED])
-            ->orderByDesc('id')
+            ->whereIn('id', static::currentIds($accountId)->whereIn('external_id', $externalIds))
             ->get();
 
         $byExternalId = [];
 
         foreach ($documents as $document) {
-            $byExternalId[$document->external_id] ??= $document;
+            $byExternalId[$document->external_id] = $document;
         }
 
         return new Collection($byExternalId);
@@ -137,10 +168,7 @@ class HubDocument extends Model
     public static function forBooking(string $externalId, string $accountId): self
     {
         $existing = static::query()
-            ->where('account_id', $accountId)
-            ->where('external_id', $externalId)
-            ->orderByRaw(self::POSTED_FIRST, [self::STATUS_POSTED])
-            ->orderByDesc('id')
+            ->whereIn('id', static::currentIds($accountId)->where('external_id', $externalId))
             ->first();
 
         return $existing ?? static::make([

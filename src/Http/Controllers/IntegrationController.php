@@ -7,6 +7,7 @@ namespace Emeq\HubSdk\Http\Controllers;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
+use Emeq\HubSdk\Exceptions\RateLimitException;
 use Emeq\HubSdk\Hub;
 use Emeq\HubSdk\Support\OAuthReturnUrl;
 use Illuminate\Http\JsonResponse;
@@ -97,10 +98,26 @@ class IntegrationController extends Controller
             'message' => $e->getMessage(),
         ]);
 
-        return response()->json([
+        $body = [
             'message' => $e->getMessage(),
             'error' => $e->error,
             'request_id' => $e->requestId,
-        ], $e->status ?? 502);
+        ];
+
+        if ($e instanceof MissingConfigurationException) {
+            return response()->json($body, $e->status ?? 503);
+        }
+
+        $body['hub_status'] = $e->status;
+
+        if ($e instanceof RateLimitException) {
+            return response()->json(
+                $body,
+                503,
+                $e->retryAfter === null ? [] : ['Retry-After' => (string) $e->retryAfter],
+            );
+        }
+
+        return response()->json($body, 502);
     }
 }

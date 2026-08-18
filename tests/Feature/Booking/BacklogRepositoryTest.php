@@ -7,14 +7,23 @@ use Emeq\HubSdk\Backlog\BacklogStatus;
 use Emeq\HubSdk\Backlog\Resources\BacklogDocumentResource;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Tests\Doubles\FakeBacklogSources;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+function documents(): Builder
+{
+    $connection = config('hub.booking.connection');
+
+    return DB::connection(is_string($connection) && $connection !== '' ? $connection : null)
+        ->table(FakeBacklogSources::TABLE);
+}
+
 function document(array $attributes = []): string
 {
-    $uuid = $attributes['uuid'] ?? 'doc-'.DB::table(FakeBacklogSources::TABLE)->count();
+    $uuid = $attributes['uuid'] ?? 'doc-'.documents()->count();
 
-    DB::table(FakeBacklogSources::TABLE)->insert(array_merge([
+    documents()->insert(array_merge([
         'module' => 'invoice',
         'uuid' => $uuid,
         'number' => '2026-001',
@@ -239,4 +248,49 @@ it('summarises the whole filter, not the page', function (): void {
         ->and($summary->byStatus[BacklogStatus::NOT_BOOKED])->toBe(1)
         ->and($summary->byStatus[HubDocument::STATUS_REJECTED])->toBe(0)
         ->and($summary->byModule)->toBe(['invoice' => 1, 'transaction' => 1]);
+});
+
+it('reads one current row, so the list and the attached booking cannot disagree', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED, [
+        'type' => 'sales_invoice',
+        'external_ref' => 'exact-9',
+        'accounting_changed_at' => '2026-08-18T10:00:00+00:00',
+        'accounting_change_action' => 'updated',
+    ]);
+    $later = booking('inv-1', HubDocument::STATUS_FAILED, ['type' => 'credit_note']);
+
+    $rows = backlog()->paginate([])->items();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->status)->toBe(HubDocument::STATUS_POSTED)
+        ->and($rows[0]->accounting_change_action)->toBe('updated')
+        ->and($rows[0]->hub_document->id)->not->toBe($later->id)
+        ->and($rows[0]->hub_document->status)->toBe(HubDocument::STATUS_POSTED);
+});
+
+it('treats a wildcard in the search term as a character, not a pattern', function (): void {
+    document(['uuid' => 'inv-1', 'party' => 'Acme']);
+    document(['uuid' => 'inv-2', 'party' => 'Bravo']);
+    document(['uuid' => 'inv-3', 'party' => '100%']);
+    document(['uuid' => 'inv-4', 'party' => 'Hola! BV']);
+
+    expect(backlog()->paginate(['search_term' => '%'])->items())->toHaveCount(1)
+        ->and(backlog()->paginate(['search_term' => '_'])->items())->toHaveCount(0)
+        ->and(backlog()->paginate(['search_term' => '!'])->items())->toHaveCount(1)
+        ->and(backlog()->paginate(['search_term' => 'Acme'])->items())->toHaveCount(1);
+});
+
+it('reads the backlog off the connection that holds the ledger', function (): void {
+    $this->useLedgerDatabase($this->temporaryDatabase());
+    $this->createDocumentsTable('tenant');
+
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_FAILED);
+
+    $rows = backlog()->paginate([])->items();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->status)->toBe(HubDocument::STATUS_FAILED)
+        ->and(backlog()->summary([])->total)->toBe(1);
 });

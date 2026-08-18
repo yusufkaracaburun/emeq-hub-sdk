@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk;
 
 use Emeq\HubSdk\Booking\AccountingChangeRecorder;
+use Emeq\HubSdk\Console\HubDoctorCommand;
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
 use Emeq\HubSdk\Events\HubWebhookReceived;
 use Emeq\HubSdk\Http\HubConnector;
@@ -30,6 +31,7 @@ class HubServiceProvider extends PackageServiceProvider
             ->hasMigration('create_webhook_calls_table')
             ->hasMigration('create_hub_documents_table')
             ->hasMigration('add_trace_to_hub_documents_table')
+            ->hasCommand(HubDoctorCommand::class)
             ->hasInstallCommand(function (InstallCommand $command): void {
                 $command
                     ->publishConfigFile()
@@ -51,16 +53,7 @@ class HubServiceProvider extends PackageServiceProvider
 
     public function packageRegistered(): void
     {
-        $this->app->singleton(HubConnector::class, function ($app): HubConnector {
-            /** @var Repository $config */
-            $config = $app->make('config');
-
-            return new HubConnector(
-                baseUrl: $config->string('hub.base_url', ''),
-                pat: $config->string('hub.pat', ''),
-                timeoutSeconds: $config->integer('hub.timeout', 30),
-            );
-        });
+        $this->app->singleton(HubConnector::class, static fn (): HubConnector => new HubConnector);
 
         $this->app->singleton(Hub::class, function ($app): Hub {
             return new Hub(

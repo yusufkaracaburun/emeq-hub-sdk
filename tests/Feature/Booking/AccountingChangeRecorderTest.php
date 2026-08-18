@@ -198,3 +198,16 @@ test('the service provider wires the recorder into a real delivery', function ()
         ->and($document->accounting_change_action)->toBe('updated')
         ->and($document->accounting_change_event_id)->toBe('evt-9');
 });
+
+it('re-reads change-column support when one connection name swaps database', function (): void {
+    $withColumns = $this->temporaryDatabase();
+    $withoutColumns = $this->temporaryDatabase();
+
+    $this->useLedgerDatabase($withColumns, withChange: true);
+
+    expect(AccountingChangeRecorder::marksChanges())->toBeTrue();
+
+    $this->useLedgerDatabase($withoutColumns, withChange: false);
+
+    expect(AccountingChangeRecorder::marksChanges())->toBeFalse();
+});

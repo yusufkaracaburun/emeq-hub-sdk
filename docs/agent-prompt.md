@@ -37,12 +37,13 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.21
+   composer require emeq/hub-sdk:^0.24
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
    EMEQ_HUB_TIMEOUT=30
    EMEQ_HUB_WEBHOOK_SECRET=
+   EMEQ_HUB_WEBHOOK_LOCK_STORE={redis — must support atomic locks}
    EMEQ_HUB_ROUTES=true
    EMEQ_HUB_ROUTES_PREFIX=api
    EMEQ_HUB_ROUTES_MIDDLEWARE={api,auth:sanctum}
@@ -74,6 +75,11 @@ DO THIS (in order)
    `webhook-client.php` for Hub, and do not invent a custom HMAC endpoint.
 10. Errors: HubException subclasses map to JSON on the BFF routes; when calling
    Hub yourself, rethrow or map and log `requestId` when set.
+   The BFF routes never pass a Hub status code through: a Hub 429 answers `503`
+   with `Retry-After`, every other upstream failure answers `502`, and a local
+   configuration error answers `503`. Read what Hub said from `hub_status` in
+   the body — do NOT branch on the HTTP status to decide the user is logged out.
+   A Hub `401` means my PAT was rejected, not that this user lost their session.
 11. ONLY IF booking is "yes" in CONTEXT. Read the README's "Booking documents"
    section before writing anything. Write exactly these three, and nothing that
    duplicates what they call into:
@@ -98,6 +104,10 @@ DO THIS (in order)
    those models — the backlog joins the two, so they cannot live on separate
    connections. Set `EMEQ_HUB_BOOKING_CONNECTION` when it is not the default and
    `EMEQ_HUB_BOOKING_LOCK_STORE` to a store that supports atomic locks.
+
+12. Verify the wiring with `php artisan hub:doctor` (add `--ping` to also call
+   Hub with the configured PAT) and fix every `fail` before calling this done.
+   Warnings are only acceptable for features CONTEXT says this app does not use.
 
 DO NOT
 - Browser / direct calls to the Hub (PAT stays server-side)

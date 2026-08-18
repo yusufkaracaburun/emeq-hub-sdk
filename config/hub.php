@@ -56,6 +56,16 @@ return [
     | support atomic locks: Laravel's `database` default needs the framework's
     | cache_locks table, so point this at redis/memcached to skip that.
     |
+    | `lock_seconds` is how long one delivery may hold that lock. Raise it only
+    | if your listeners do slow work inside the delivery: a lock that expires
+    | mid-handling lets a redelivery of the same event id run alongside it.
+    |
+    | Deduplication reads `webhook_calls` history to recognise an event id it
+    | already handled, so `webhook-client.delete_after_days` (Spatie's default:
+    | 30) sets the window in which that still works. Anything above Hub's retry
+    | span — roughly three hours — is enough; cut it to hours and a late
+    | redelivery outlives its own record and is processed a second time.
+    |
     */
     'webhook' => [
         'enabled' => (bool) env('EMEQ_HUB_WEBHOOK_ENABLED', true),
@@ -64,6 +74,7 @@ return [
         'profile' => HubWebhookProfile::class,
         'job' => ProcessHubWebhookJob::class,
         'lock_store' => env('EMEQ_HUB_WEBHOOK_LOCK_STORE'),
+        'lock_seconds' => (int) env('EMEQ_HUB_WEBHOOK_LOCK_SECONDS', 30),
     ],
 
     /*
@@ -76,6 +87,8 @@ return [
     | the database that holds the documents it tracks: a ledger read against the
     | wrong connection answers "not booked yet" and the next run posts a
     | duplicate into a real administration. Null uses your default connection.
+    | The backlog reads this same connection, so the documents it lists have to
+    | be reachable from it.
     |
     | `lock_store` names the cache store that serializes concurrent attempts on
     | one document. Null uses your default store, which must support atomic

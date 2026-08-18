@@ -1,5 +1,102 @@
 # Changelog
 
+## [0.24.0] — 2026-08-18
+
+A hardening round. Nothing new to build with — the same calls, closer to what
+they already claimed to do. Two findings are multi-database bugs a single-tenant
+consumer never meets; the rest closes gaps between what the config file promises
+and what the code read.
+
+**Consumers with a front end must read "BFF routes no longer pass Hub's status
+code through" below — the only change here that a caller can see.**
+
+### Added
+
+- **`php artisan hub:doctor`.** Reads the configuration this application booted
+  with and reports per check: base URL, PAT, timeout, both lock stores and their
+  windows, the `ResolvesAccountId` / `ResolvesWebhookAccount` bindings, the
+  `hub_documents` table and its optional columns on the connection
+  `hub.booking.connection` names, the `webhook-client` entry and its signing
+  secret, `webhook_calls`, the BFF middleware stack and the OAuth return path.
+  `--ping` also calls Hub with the configured PAT. Exit code is non-zero on a
+  failure; warnings pass.
+
+  The lock checks take and release a throwaway lock rather than asking the store
+  whether it implements `LockProvider`: Laravel's `database` store answers yes
+  and then fails on the first booking when `cache_locks` was never migrated.
+
+  Every production incident this package has had was config-shaped — a ledger on
+  the wrong connection, `webhook_calls` missing, a cache store that cannot lock.
+  Each was findable before deploying, by a command that did not exist.
+
+- **Every request names the SDK.** `User-Agent: emeq-hub-sdk/{version}
+  php/{version} laravel/{version}` plus `X-Emeq-Sdk-Version`. Hub could not
+  previously tell which consumer ran which release, which is the measurement any
+  future deprecation depends on. `Support\SdkIdentity` exposes the same values.
+
+- **`hub.webhook.lock_seconds`** (`EMEQ_HUB_WEBHOOK_LOCK_SECONDS`, default 30).
+  The dedupe lock window was a hardcoded 30 while the booking lock next to it was
+  configurable and validated. The published config also now records that
+  deduplication reads `webhook_calls` history, so `webhook-client.delete_after_days`
+  has to stay above Hub's ~3h retry span — Spatie's default of 30 days already is.
+
+### Fixed
+
+- **The ledger's schema probe froze across tenant databases.** `hub_documents`
+  is asked once whether it carries the optional trace and accounting-change
+  columns. That answer was cached in a single process-wide flag, so a worker
+  serving several tenant databases through one connection name reused the first
+  tenant's answer for all of them: a tenant whose migration had not run yet
+  would have every booking fail on `request_id`, until the worker restarted.
+  The cache is now keyed by connection *and* database name.
+
+- **The backlog read the default connection while the ledger read
+  `hub.booking.connection`.** `BacklogRepository` built its outer query on
+  `DB::query()` and only the ledger subquery on the configured connection, so
+  the moment those differed the join compiled into SQL aimed at the wrong
+  database. Every backlog query now runs on the ledger's connection.
+
+- **Two rules decided which ledger row was current.** `forExternalIds()` /
+  `forBooking()` preferred a posted row over a newer attempt; the backlog's join
+  took `MAX(id)`. One response could therefore list a document as `failed` while
+  the record attached to it said `posted`. Both now read
+  `HubDocument::currentIds()` — posted first, newest otherwise.
+
+- **`Retry-After` as an HTTP date was discarded.** Only an integer count of
+  seconds was parsed; a date-form header left `retryAfter` null and the caller
+  guessing. Dates are now read too, and one already in the past reads as `0`
+  rather than a negative wait.
+
+- **A wildcard in the backlog's `search_term` was a pattern, not a character.**
+  A user typing `%` matched every row and scanned the table. `%` and `_` are now
+  escaped with an explicit `ESCAPE` clause.
+
+### Changed
+
+- **BFF routes no longer pass Hub's status code through.** `IntegrationController`
+  answered with whatever Hub answered, so a rejected *PAT* reached the browser as
+  `401` — which a client reads as "the signed-in user lost their session" and
+  acts on by logging them out, over a server-side credential problem it cannot
+  fix. A Hub 429 now becomes `503` with `Retry-After`; every other upstream
+  failure becomes `502`; locally-raised configuration errors keep their `503`.
+  The body keeps `message`, `error` and `request_id` and gains `hub_status`
+  carrying what Hub actually said.
+
+  **Migration:** a front end branching on the status of `/integrations` or
+  `/integrations/connect-session` reads `hub_status` from the body instead.
+
+- **`HubConnector` reads its configuration when it sends.** Base URL, PAT and
+  timeout were baked in when the container first built the singleton, so config
+  changed afterwards — per tenant, or in a test — was ignored for the rest of the
+  process. Constructor arguments are now optional and still win when passed; the
+  binding stays a singleton, so a mock client registered on it still intercepts
+  every call.
+
+- **The lock rules have one home.** `Support\HubLocks` holds the store
+  resolution, the booking window's `lock_seconds > timeout` rule and the webhook
+  window; `DocumentBooker` and `HubWebhookDeduplicator` delegate to it. Their
+  public and protected methods are unchanged.
+
 ## [0.23.0] — 2026-08-18
 
 Hub's relation ladder is live, so the fixtures this package ships as its test

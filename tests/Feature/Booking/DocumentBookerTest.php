@@ -11,6 +11,7 @@ use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\CreateDocumentRequest;
 use Emeq\HubSdk\Testing\HubMock;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Saloon\Http\Faking\MockClient;
@@ -283,8 +284,40 @@ it('carries the wait Hub asked for, so a retry does not have to guess', function
     $this->fail('Expected a BookingTemporarilyUnavailable.');
 });
 
-it('ignores a Retry-After it cannot read as seconds', function (): void {
+it('reads a Retry-After Hub sent as an HTTP date', function (): void {
+    Carbon::setTestNow('2026-10-21T07:27:00+00:00');
+
     mockHub(hubError('upstream_unavailable', 429, 'RATE_LIMIT', ['Retry-After' => 'Wed, 21 Oct 2026 07:28:00 GMT']));
+
+    try {
+        booker()->book(canonicalDocument());
+    } catch (BookingTemporarilyUnavailable $e) {
+        expect($e->retryAfter)->toBe(60);
+
+        return;
+    }
+
+    $this->fail('Expected a BookingTemporarilyUnavailable.');
+});
+
+it('floors an HTTP date Retry-After that already passed', function (): void {
+    Carbon::setTestNow('2026-10-21T09:00:00+00:00');
+
+    mockHub(hubError('upstream_unavailable', 429, 'RATE_LIMIT', ['Retry-After' => 'Wed, 21 Oct 2026 07:28:00 GMT']));
+
+    try {
+        booker()->book(canonicalDocument());
+    } catch (BookingTemporarilyUnavailable $e) {
+        expect($e->retryAfter)->toBe(0);
+
+        return;
+    }
+
+    $this->fail('Expected a BookingTemporarilyUnavailable.');
+});
+
+it('ignores a Retry-After it cannot read at all', function (): void {
+    mockHub(hubError('upstream_unavailable', 429, 'RATE_LIMIT', ['Retry-After' => 'zo snel mogelijk']));
 
     try {
         booker()->book(canonicalDocument());

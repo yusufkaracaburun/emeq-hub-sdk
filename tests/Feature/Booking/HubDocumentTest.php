@@ -90,3 +90,28 @@ it('indexes the lookup every accounting-change delivery performs', function (): 
 
     expect($indexed)->toBeTrue();
 });
+
+it('re-reads trace support when one connection name swaps database', function (): void {
+    $withTrace = $this->temporaryDatabase();
+    $withoutTrace = $this->temporaryDatabase();
+
+    $this->useLedgerDatabase($withTrace, withTrace: true);
+
+    expect(HubDocument::tracesRequests())->toBeTrue();
+
+    $this->useLedgerDatabase($withoutTrace, withTrace: false);
+
+    expect(HubDocument::tracesRequests())->toBeFalse();
+});
+
+it('keeps writing a booking when the ledger it lands on has no trace columns', function (): void {
+    $this->useLedgerDatabase($this->temporaryDatabase(), withTrace: false);
+
+    $written = HubDocument::withoutMissingTrace([
+        'status' => HubDocument::STATUS_FAILED,
+        'request_id' => 'req-1',
+        'category' => 'PROVIDER_ERROR',
+    ]);
+
+    expect($written)->toBe(['status' => HubDocument::STATUS_FAILED]);
+});

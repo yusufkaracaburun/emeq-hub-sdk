@@ -139,6 +139,20 @@ default needs the framework's `cache_locks` table, or point
 `EMEQ_HUB_WEBHOOK_LOCK_STORE` at redis/memcached. A failed job records its
 exception on `webhook_calls`, so Hub's redelivery is not mistaken for a duplicate.
 
+`EMEQ_HUB_WEBHOOK_LOCK_SECONDS` (default 30) bounds how long one delivery holds
+that lock. Raise it only when your listeners do slow work inside the delivery: a
+lock that expires mid-handling lets a redelivery of the same event id run
+alongside it.
+
+**Deduplication reads `webhook_calls` history**, so whatever prunes that table
+sets the window in which it still works. Spatie's `WebhookCall` is `MassPrunable`
+and `Illuminate\Database\Eloquent\PruneCommand` (`model:prune`, which you
+schedule yourself) deletes rows older than `webhook-client.delete_after_days`,
+default 30 days. That default is far longer than Hub's retry span — five
+attempts over roughly three hours — so the only way to break deduplication is to
+lower it to hours. `null` disables pruning entirely. `php artisan hub:doctor`
+checks that the table exists, not how long you keep it.
+
 Some event ids identify nothing: Hub sends the literal `no-id` when the partner
 omitted an id of its own, so unrelated events share it. Those are processed like
 a webhook with no event id at all — never deduplicated. To recognise more, pass

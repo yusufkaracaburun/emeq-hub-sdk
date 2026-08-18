@@ -15,7 +15,7 @@ the API surface; webhook wiring lives in [`docs/webhooks.md`](docs/webhooks.md).
 
 ```bash
 composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-composer require emeq/hub-sdk:^0.21
+composer require emeq/hub-sdk:^0.24
 ```
 
 ```bash
@@ -38,6 +38,8 @@ EMEQ_HUB_ROUTES_PREFIX=api
 EMEQ_HUB_ROUTES_MIDDLEWARE=api,auth:sanctum
 # Cache store for webhook dedupe locks. Empty = default store (must support locks).
 EMEQ_HUB_WEBHOOK_LOCK_STORE=redis
+# How long one delivery may hold that lock.
+EMEQ_HUB_WEBHOOK_LOCK_SECONDS=30
 # Relative path on YOUR host only (no https://…). Empty = omit return_url.
 EMEQ_HUB_OAUTH_RETURN_PATH=/settings/integrations?oauth=1
 # Booking documents? See "Booking documents" below.
@@ -56,6 +58,33 @@ EMEQ_HUB_BOOKING_LOCK_STORE=redis
 5. Booking documents? Migrate `hub_documents` onto the database that holds them
    and set `hub.booking.connection` when that is not your default —
    [Booking documents](#booking-documents).
+6. Run `php artisan hub:doctor` — see [Checking the wiring](#checking-the-wiring).
+
+### Checking the wiring
+
+```bash
+php artisan hub:doctor          # configuration only, no network
+php artisan hub:doctor --ping   # also calls Hub with the configured PAT
+```
+
+It reads exactly what this application booted with and reports per check:
+base URL and PAT, request timeout, both lock stores and their windows —
+by taking and releasing a throwaway lock, so the `database` store missing its
+`cache_locks` table fails here instead of at the first booking —
+`ResolvesAccountId` / `ResolvesWebhookAccount` bindings, the `hub_documents`
+table (and whether it carries the trace and accounting-change columns) on the
+connection `hub.booking.connection` names, the `webhook-client` entry and its
+signing secret, `webhook_calls` on the default connection, the BFF middleware
+stack and the OAuth return path.
+
+Exit code is non-zero when a check **fails**; warnings do not fail the command.
+A warning means the feature that check covers is off or unmigrated — fine when
+this app does not use it, a missing deploy step when it does.
+
+One thing it cannot see: in a multi-database application `webhook_calls` must
+also exist on the connection `ResolvesWebhookAccount::prepare()` binds, and the
+command can only inspect the default connection. Check that one yourself —
+[`docs/webhooks.md`](docs/webhooks.md).
 
 The package registers auth-protected routes when `EMEQ_HUB_ROUTES=true`
 (default `false`). Middleware must be non-empty **and carry an `auth`-family
@@ -352,7 +381,17 @@ attachment rendering on top of the timeout.
 Publish `hub-migrations` and migrate `hub_documents` onto the database that
 holds the documents it tracks — the backlog joins the two, so they cannot live
 on separate connections. A ledger on the wrong connection reads as "not booked
-yet", and the next run posts a duplicate into a real administration.
+yet", and the next run posts a duplicate into a real administration. Every
+backlog query runs on `hub.booking.connection`, not on your default connection,
+so the source builders `ProvidesBacklogSources` hands back have to be readable
+from there.
+
+**Roll the ledger migrations out to every tenant before deploying.** The package
+asks each ledger database once whether it carries the optional trace and
+accounting-change columns, and caches that answer per connection *and* database
+name. A worker that serves several tenant databases through one connection name
+therefore answers correctly per tenant — but a tenant still missing a migration
+silently books without a trace until you run it.
 
 ### Tracing a failure back to Hub
 
@@ -453,6 +492,16 @@ suite. `Http\*` is package-internal (BFF / Saloon).
 Account context uses `X-Account-Id` / `account_external_id` from
 `ResolvesAccountId` or an explicit argument.
 
+Every request carries `User-Agent: emeq-hub-sdk/{version} php/{version}
+laravel/{version}` and `X-Emeq-Sdk-Version`, so Hub can tell which consumers run
+which release. `Support\SdkIdentity::version()` reads the same value from
+Composer's installed manifest.
+
+`HubConnector` reads `hub.base_url`, `hub.pat` and `hub.timeout` when it sends,
+not when the container built it. Config swapped per tenant at runtime therefore
+takes effect on the next call — the connector stays a singleton, so a mock
+client registered on it still intercepts everything.
+
 ## Errors
 
 Failed Hub responses throw `Emeq\HubSdk\Exceptions\HubException` (or a subclass).
@@ -472,6 +521,27 @@ Every SDK failure is a `HubException` — configuration mistakes included, so
 `catch (HubException $e)` around SDK calls is sufficient.
 
 Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_id`.
+
+`RateLimitException::$retryAfter` carries Hub's `Retry-After` in seconds, whether
+Hub sent a number of seconds or an HTTP date. A date already in the past reads as
+`0`, never as a negative wait.
+
+### What the BFF routes answer
+
+The opt-in routes never pass a Hub status code through to the browser. A Hub 401
+means *your PAT* was rejected, not that the signed-in user lost their session —
+answering 401 there would make a client log its user out over a server-side
+credential problem.
+
+| Hub answered | Route answers |
+|---|---|
+| 429 | `503` + `Retry-After` |
+| anything else that failed | `502` |
+| local configuration error | `503` |
+
+The body keeps `message`, `error` and `request_id`, and adds `hub_status` with
+what Hub actually said, so the original status stays available for debugging
+without steering the client's auth handling.
 
 ## Pitfalls
 

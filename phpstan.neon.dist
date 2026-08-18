@@ -4,9 +4,6 @@ parameters:
         - src
     ignoreErrors:
         -
-            identifier: nullCoalesce.expr
-            path: src/Http/HubConnector.php
-        -
             identifier: function.alreadyNarrowedType
         -
             identifier: trait.unused

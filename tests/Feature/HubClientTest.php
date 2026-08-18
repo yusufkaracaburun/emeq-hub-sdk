@@ -12,6 +12,7 @@ use Emeq\HubSdk\Http\Request\Accounting\GetAccountingRequest;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
 use Emeq\HubSdk\Hub;
+use Emeq\HubSdk\Support\SdkIdentity;
 use Emeq\HubSdk\Testing\HubMock;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
@@ -290,4 +291,40 @@ it('hands the consumer log the value that ties a failure to a Hub log line', fun
             'hub_status' => 401,
         ]);
     }
+});
+
+it('reads base url and PAT when it sends, not when the container built it', function (): void {
+    $connector = app(HubConnector::class);
+
+    expect($connector->resolveBaseUrl())->toBe('https://hub.example.test/v1');
+
+    config()->set('hub.base_url', 'https://hub-tenant-b.example.test/');
+    config()->set('hub.pat', 'tenant-b-pat');
+    config()->set('hub.timeout', 45);
+
+    expect(app(HubConnector::class))->toBe($connector)
+        ->and($connector->resolveBaseUrl())->toBe('https://hub-tenant-b.example.test/v1')
+        ->and($connector->config()->get('timeout'))->toBe(45);
+
+    $mock = new MockClient([ListIntegrationsRequest::class => MockResponse::make([], 200)]);
+    $connector->withMockClient($mock);
+
+    app(Hub::class)->integrations()->list('tenant-b');
+
+    expect($mock->getLastPendingRequest()->headers()->get('Authorization'))->toBe('Bearer tenant-b-pat');
+});
+
+it('names itself and its version on every request it sends', function (): void {
+    $mock = new MockClient([ListIntegrationsRequest::class => MockResponse::make([], 200)]);
+    app(HubConnector::class)->withMockClient($mock);
+
+    app(Hub::class)->integrations()->list('tenant-1');
+
+    $headers = $mock->getLastPendingRequest()->headers();
+
+    expect($headers->get('User-Agent'))->toStartWith('emeq-hub-sdk/')
+        ->and($headers->get('User-Agent'))->toContain(' php/'.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION)
+        ->and($headers->get('User-Agent'))->toContain(' laravel/')
+        ->and($headers->get(SdkIdentity::VERSION_HEADER))->toBe(SdkIdentity::version())
+        ->and($headers->get(SdkIdentity::VERSION_HEADER))->not->toBe('unknown');
 });

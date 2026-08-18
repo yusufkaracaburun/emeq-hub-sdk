@@ -140,3 +140,67 @@ it('returns 503 when ResolvesAccountId is not bound', function (): void {
     $response->assertStatus(503)
         ->assertJsonPath('error', 'missing_account_resolver');
 });
+
+describe('upstream failures', function (): void {
+    beforeEach(function (): void {
+        $this->app->bind(ResolvesAccountId::class, fn (): ResolvesAccountId => new class implements ResolvesAccountId
+        {
+            public function accountId(): string
+            {
+                return 'tenant-77';
+            }
+
+            public function displayName(): ?string
+            {
+                return 'Demo BV';
+            }
+        });
+    });
+
+    it('never hands a Hub auth failure to the browser as the user\'s own', function (): void {
+        $mock = new MockClient([
+            ListIntegrationsRequest::class => MockResponse::make([
+                'error' => 'unauthenticated',
+                'category' => 'AUTHENTICATION_ERROR',
+                'message' => 'PAT rejected.',
+                'request_id' => 'req-42',
+            ], 401),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->getJson('/api/integrations')
+            ->assertStatus(502)
+            ->assertJsonPath('error', 'unauthenticated')
+            ->assertJsonPath('request_id', 'req-42')
+            ->assertJsonPath('hub_status', 401);
+    });
+
+    it('turns a Hub rate limit into a wait the caller can act on', function (): void {
+        $mock = new MockClient([
+            ListIntegrationsRequest::class => MockResponse::make(
+                ['error' => 'rate_limited', 'message' => 'Slow down.'],
+                429,
+                ['Retry-After' => '12'],
+            ),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $response = $this->getJson('/api/integrations');
+
+        $response->assertStatus(503)
+            ->assertJsonPath('hub_status', 429);
+
+        expect($response->headers->get('Retry-After'))->toBe('12');
+    });
+
+    it('does not answer 404 for an account Hub does not know', function (): void {
+        $mock = new MockClient([
+            ListIntegrationsRequest::class => MockResponse::make(['error' => 'account_not_found'], 404),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->getJson('/api/integrations')
+            ->assertStatus(502)
+            ->assertJsonPath('hub_status', 404);
+    });
+});
