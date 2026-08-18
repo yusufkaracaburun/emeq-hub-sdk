@@ -3,7 +3,26 @@
 Which `/v1/*` endpoints of emeq-hub this SDK wraps, and which it does not yet.
 This doubles as a progress doc: every ⬜ row is backlog.
 
-**As of** 2026-08-13 · **Hub** `898cab7` · **SDK** `8f0485d`
+**As of** 2026-08-18 · **Hub** `adc5045` · **SDK** `0.22.0`
+
+Re-checked against Hub `adc5045`: no `/v1` route has been added or removed since
+the previous stamp, so every count below still holds. What changed in that window
+is behaviour behind routes already listed — the relation ladder on
+`POST /accounting/documents`, `retryable` in the error envelope, and full
+skiptoken paging on the mirror reads. Hub also grew a signed, non-`/v1` surface
+for its own connect drawer (`/connect/{account}/{provider}/manage*`); it is not
+client API and is deliberately absent from this table.
+
+Two gaps worth naming, neither of them a missing wrapper:
+
+- **`X-Connection-Id` is unreachable.** Hub requires it once an Account has more
+  than one accounting connection and answers `409 multiple_accounting_connections`
+  with a `connections[]` list otherwise. No request class here sends the header,
+  so such an account cannot book through this SDK. (`hub.booking.connection` is a
+  *database* connection — unrelated, and easy to confuse.)
+- **`candidates[]` and `connections[]` are dropped.** `HubException` parses only
+  the 422 field bag, so the list Hub sends with `409 relation_ambiguous` — the one
+  a user needs to resolve it — does not survive.
 
 The Hub publishes its own OpenAPI at <https://hub.emeq.nl/docs/api>. That is the
 server side and says nothing about what this SDK supports — hence this document.

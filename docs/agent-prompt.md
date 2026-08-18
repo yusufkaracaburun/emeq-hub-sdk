@@ -37,7 +37,7 @@ CONTEXT
 DO THIS (in order)
 1. Add Composer VCS repo and require:
    composer config repositories.emeq-hub-sdk vcs https://github.com/yusufkaracaburun/emeq-hub-sdk.git
-   composer require emeq/hub-sdk:^0.14
+   composer require emeq/hub-sdk:^0.21
 2. Set in `.env` / `.env.example`:
    EMEQ_HUB_BASE={https://hub.emeq.nl}
    EMEQ_HUB_PAT=
