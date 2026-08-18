@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.25.0] — 2026-08-18
+
+### Fixed
+
+- **A document the bookkeeping only edited stays out of the backlog.**
+  `PostedDocuments::excluding()` read any `accounting_changed_at` as a reason to
+  hand a posted document back to the backlog as still-to-book. In Exact that
+  stamp lands on routine work — matching a bank line against an outstanding
+  entry is one — so every booked invoice eventually returned to the list, and
+  booking it a second time would write a second entry into the administration.
+
+  Only `accounting_change_action = 'deleted'` now returns a posted document:
+  the entry is gone from the bookkeeping, so there is genuinely something left
+  to book. An edit stays out of the backlog and shows on the document's own
+  badge, which reads `hub_documents` directly and did not change.
+
+  A consumer that hangs a "changed in the bookkeeping" tab off the backlog will
+  find it holds deletions only. Rename it, or drop it.
+
+  The rule is skipped where the change columns are missing, through the same
+  `AccountingChangeRecorder::marksChanges()` check the recorder already uses, so
+  a schema without them keeps excluding on `status` alone.
+
 ## [0.24.1] — 2026-08-18
 
 ### Fixed

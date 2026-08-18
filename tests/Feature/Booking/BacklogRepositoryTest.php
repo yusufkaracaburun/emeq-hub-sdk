@@ -5,11 +5,14 @@ declare(strict_types=1);
 use Emeq\HubSdk\Backlog\BacklogRepository;
 use Emeq\HubSdk\Backlog\BacklogStatus;
 use Emeq\HubSdk\Backlog\Resources\BacklogDocumentResource;
+use Emeq\HubSdk\Booking\AccountingChangeRecorder;
 use Emeq\HubSdk\Booking\HubDocument;
 use Emeq\HubSdk\Tests\Doubles\FakeBacklogSources;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 function documents(): Builder
 {
@@ -171,12 +174,49 @@ it('drops a posted, unchanged document from the backlog, same as before', functi
     expect(backlog()->paginate([])->items())->toHaveCount(0);
 });
 
+it('keeps a posted document out of the backlog when the bookkeeping only updated it', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED, [
+        'accounting_changed_at' => '2026-08-18T09:00:00+00:00',
+        'accounting_change_action' => 'updated',
+    ]);
+
+    expect(backlog()->paginate([])->items())->toHaveCount(0);
+});
+
+it('returns a posted document to the backlog once the bookkeeping deleted it', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED, [
+        'accounting_changed_at' => '2026-08-18T09:00:00+00:00',
+        'accounting_change_action' => 'deleted',
+    ]);
+
+    $rows = backlog()->paginate([])->items();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->uuid)->toBe('inv-1');
+});
+
+it('excludes a posted document on status alone when the change columns are missing', function (): void {
+    document(['uuid' => 'inv-1']);
+    booking('inv-1', HubDocument::STATUS_POSTED);
+
+    Schema::table((new HubDocument)->getTable(), function (Blueprint $table): void {
+        $table->dropColumn(['accounting_changed_at', 'accounting_change_action', 'accounting_change_event_id']);
+    });
+    AccountingChangeRecorder::forgetChangeSupport();
+
+    $rows = app(FakeBacklogSources::class)->bookable(['invoice'])->get();
+
+    expect($rows)->toHaveCount(0);
+});
+
 it('surfaces only the posted document the bookkeeping changed afterwards', function (): void {
     document(['uuid' => 'inv-1']);
     document(['uuid' => 'inv-2']);
     booking('inv-1', HubDocument::STATUS_POSTED, [
         'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
-        'accounting_change_action' => 'updated',
+        'accounting_change_action' => 'deleted',
     ]);
     booking('inv-2', HubDocument::STATUS_POSTED);
 
@@ -202,7 +242,10 @@ it('composes the accounting-changed filter with a status filter, not replacing i
 it('counts accounting-changed documents in the summary alongside by_status', function (): void {
     document(['uuid' => 'inv-1']);
     document(['uuid' => 'inv-2']);
-    booking('inv-2', HubDocument::STATUS_POSTED, ['accounting_changed_at' => '2026-08-17T09:00:00+00:00']);
+    booking('inv-2', HubDocument::STATUS_POSTED, [
+        'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
+        'accounting_change_action' => 'deleted',
+    ]);
 
     $summary = backlog()->summary([]);
 
@@ -214,14 +257,14 @@ it('exposes when and how the bookkeeping changed a document, on the row itself',
     document(['uuid' => 'inv-1']);
     booking('inv-1', HubDocument::STATUS_POSTED, [
         'accounting_changed_at' => '2026-08-17T09:00:00+00:00',
-        'accounting_change_action' => 'updated',
+        'accounting_change_action' => 'deleted',
     ]);
 
     $row = backlog()->paginate(['accounting_changed' => 1])->items()[0];
     $resource = (new BacklogDocumentResource($row))->toArray(Request::create('/'));
 
     expect($resource['accounting_changed_at'])->toBe('2026-08-17T09:00:00+00:00')
-        ->and($resource['accounting_change_action'])->toBe('updated');
+        ->and($resource['accounting_change_action'])->toBe('deleted');
 });
 
 it('reads accounting_changed_at as null for a document never reported changed', function (): void {
@@ -256,7 +299,7 @@ it('reads one current row, so the list and the attached booking cannot disagree'
         'type' => 'sales_invoice',
         'external_ref' => 'exact-9',
         'accounting_changed_at' => '2026-08-18T10:00:00+00:00',
-        'accounting_change_action' => 'updated',
+        'accounting_change_action' => 'deleted',
     ]);
     $later = booking('inv-1', HubDocument::STATUS_FAILED, ['type' => 'credit_note']);
 
@@ -264,7 +307,7 @@ it('reads one current row, so the list and the attached booking cannot disagree'
 
     expect($rows)->toHaveCount(1)
         ->and($rows[0]->status)->toBe(HubDocument::STATUS_POSTED)
-        ->and($rows[0]->accounting_change_action)->toBe('updated')
+        ->and($rows[0]->accounting_change_action)->toBe('deleted')
         ->and($rows[0]->hub_document->id)->not->toBe($later->id)
         ->and($rows[0]->hub_document->status)->toBe(HubDocument::STATUS_POSTED);
 });
