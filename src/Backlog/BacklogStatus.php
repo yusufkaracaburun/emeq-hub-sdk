@@ -18,6 +18,7 @@ final class BacklogStatus
             HubDocument::STATUS_FAILED,
             HubDocument::STATUS_REJECTED,
             HubDocument::STATUS_UNKNOWN,
+            HubDocument::STATUS_UNAVAILABLE,
         ];
     }
 }

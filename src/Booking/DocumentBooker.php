@@ -39,7 +39,10 @@ class DocumentBooker
      *                                                                     records `attachment_render_failed`
      *                                                                     instead of losing the attempt
      *
-     * @throws BookingTemporarilyUnavailable when nothing was decided and the caller should retry
+     * @throws BookingTemporarilyUnavailable when Hub could not be reached; the attempt is
+     *                                       recorded as {@see HubDocument::STATUS_UNAVAILABLE}
+     *                                       so the backlog can tell it apart from never tried,
+     *                                       and the caller should retry
      */
     public function book(array $document, ?Closure $attachments = null): HubDocument
     {
@@ -102,6 +105,14 @@ class DocumentBooker
         try {
             $result = $this->hub->accounting()->createDocument($document, $this->idempotencyKey($record, $externalId));
         } catch (RateLimitException|ServerException $e) {
+            $this->store($record, $document, [
+                'status' => HubDocument::STATUS_UNAVAILABLE,
+                'error' => $e->error,
+                'error_message' => $e->getMessage(),
+                'request_id' => $e->requestId,
+                'category' => $e->category,
+            ]);
+
             throw new BookingTemporarilyUnavailable($e->getMessage(), $e->retryAfter, $e);
         } catch (HubException $e) {
             if ($this->decidesNothing($e)) {

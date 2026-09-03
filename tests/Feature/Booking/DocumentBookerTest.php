@@ -122,13 +122,17 @@ it('leaves no row when Hub is still working on the same key', function (): void 
     expect(HubDocument::query()->count())->toBe(0);
 });
 
-it('leaves no row on a rate limit or an upstream outage', function (int $status): void {
+it('records a rate limit or an upstream outage instead of losing the attempt', function (int $status): void {
     mockHub(hubError('upstream_unavailable', $status, 'SERVER_ERROR'));
 
     expect(fn () => booker()->book(canonicalDocument()))
         ->toThrow(BookingTemporarilyUnavailable::class);
 
-    expect(HubDocument::query()->count())->toBe(0);
+    $record = HubDocument::query()->sole();
+
+    expect($record->status)->toBe(HubDocument::STATUS_UNAVAILABLE)
+        ->and($record->error)->toBe('upstream_unavailable')
+        ->and($record->booked_at)->toBeNull();
 })->with([429, 500, 503]);
 
 it('records an interrupted send as unknown rather than losing the attempt', function (): void {

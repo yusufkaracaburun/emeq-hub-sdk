@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.27.0] — 2026-09-03
+
+### Added
+
+- **`HubDocument::STATUS_UNAVAILABLE`.** A rate limit or a 5xx from Hub left no
+  row behind — `DocumentBooker::attemptBooking()` threw
+  `BookingTemporarilyUnavailable` without calling `store()`, on the assumption
+  that "nothing was decided" meant nothing worth keeping. In practice a
+  throttled batch run (Hub's rate-gate firing under burst load) left documents
+  indistinguishable from ones nobody had ever tried to book: same row, same
+  absence of a row. Nothing surfaced the difference until someone re-ran the
+  batch by hand.
+
+  `attemptBooking()` now stores the attempt with `STATUS_UNAVAILABLE` — Hub's
+  own `error`, `category` and `request_id` carried through, same as the
+  `HubException` branch beside it — before throwing. `BacklogStatus::all()`
+  includes it, so a consumer's backlog list and summary counts pick it up for
+  free through the existing status-driven filtering.
+
 ## [0.26.0] — 2026-08-18
 
 ### Fixed

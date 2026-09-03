@@ -52,6 +52,8 @@ class HubDocument extends Model
 
     public const STATUS_UNKNOWN = 'unknown';
 
+    public const STATUS_UNAVAILABLE = 'unavailable';
+
     private const CURRENT_ID = 'COALESCE(MAX(CASE WHEN status = ? THEN id END), MAX(id))';
 
     /** @var array<string, bool> */

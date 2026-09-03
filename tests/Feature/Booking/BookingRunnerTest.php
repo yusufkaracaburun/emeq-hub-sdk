@@ -95,7 +95,7 @@ it('hands the caller what Hub reported about the relation, on the outcome and in
     expect($resource['booking']['warnings'])->toBe($outcome->warnings);
 });
 
-it('answers 503 when nothing was decided, so the caller may retry', function (): void {
+it('answers 503 when Hub could not be reached, so the caller may retry', function (): void {
     app(HubConnector::class)->withMockClient(new MockClient([
         CreateDocumentRequest::class => MockResponse::make([
             'error' => 'upstream_unavailable',
@@ -109,8 +109,11 @@ it('answers 503 when nothing was decided, so the caller may retry', function ():
     expect($outcome->mayRetry())->toBeTrue()
         ->and($outcome->status)->toBe(503)
         ->and($outcome->message)->not->toContain('Upstream is down.')
-        ->and($outcome->reason)->toContain('Upstream is down.')
-        ->and(HubDocument::query()->count())->toBe(0);
+        ->and($outcome->reason)->toContain('Upstream is down.');
+
+    $record = HubDocument::query()->sole();
+
+    expect($record->status)->toBe(HubDocument::STATUS_UNAVAILABLE);
 });
 
 it('sends attachments only when asked', function (): void {
