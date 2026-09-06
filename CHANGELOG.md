@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.28.0] — 2026-09-06
+
+### Added
+
+- **`Hub::itheorie()`, the first resource that carries no account context.** Hub
+  buys theory access codes under one reseller agreement of its own, so there is
+  no connection to scope a call to and no `X-Account-Id` to send. Every other
+  resource in this package takes `HasAccountIdHeader`; these six requests
+  deliberately do not, and a test proves the header stays absent even when the
+  consumer binds a `ResolvesAccountId`. That test is the point: `emeq/system`
+  always binds one, so without it a keyless route would ride along on a valid
+  account context in every suite that could catch the mistake.
+
+  Six methods: `courses()`, `course()`, `createPurchase()`, `purchase()`,
+  `student()` and `studentDetailed()`. `courses()` returns Hub's
+  `{"links": …, "data": […]}` envelope rather than a bare list, so paging
+  information survives the call.
+
+  Two methods are absent on purpose. There is no `purchases()` list — Hub
+  exposes no list endpoint, because one reseller serves every consumer and an
+  unfiltered list would hand out other consumers' names, e-mail addresses, phone
+  numbers and auto-login links. And there is no `token()`: Hub holds that
+  credential now, which is why callers route through it at all.
+
+- **`PurchaseInFlight`, so an irreversible purchase is never retried by
+  reflex.** `createPurchase()` costs money and cannot be undone. A `409
+  purchase_in_flight` means an earlier attempt with that idempotency key died
+  without a known outcome — a code may already have been bought and charged.
+  Until now that answer arrived as a bare `HubException` and was only
+  recognisable by comparing `$e->error` to a string, which is thin protection on
+  a billed path.
+
+  The new arm in `HubException::fromEnvelope()` matches on status **and** error
+  together. `match (true)` treats comma-separated conditions as alternatives, so
+  a comma there would have turned every 409 into a `PurchaseInFlight`, including
+  the `idempotency_request_in_progress` and `document_sync_in_progress` that
+  `DocumentBooker` handles as transient. A test asserts that other conflicts
+  still arrive as a plain `HubException`.
+
+  It extends `HubException`, not `RateLimitException` or `ServerException`.
+  Those two are caught first in `DocumentBooker::attemptBooking()`, which writes
+  `STATUS_UNAVAILABLE` and drives a consumer's backlog list — an iTheorie
+  conflict has no business leaving documents hanging there. A case in
+  `DocumentBookerTest` fails the moment that inheritance moves.
+
+- **`HubMock::itheorie()` and five captured fixtures.** Taken from Hub's own
+  request stack rather than a live purchase: buying one costs €9.70, and a real
+  purchase response carries a name, an e-mail address, a phone number and an
+  auto-login URL. The captures settle two shapes a hand-written mock gets wrong
+  — a course `offer` holds bare floats (`"current_price": 9.7`) while a purchase
+  `price` keeps the partner's object with a *string* amount
+  (`{"amount": "9.70"}`), and both `access_code` and `expires_at` can be `null`
+  on a `200`.
+
+  `student()` and `studentDetailed()` answer the same shape, so one fixture
+  serves both.
+
+### Not added, on purpose
+
+- No retry helper around `createPurchase()`. Re-sending the *same* key after a
+  502 or 504 is safe and answers `PurchaseInFlight`; generating a *fresh* key is
+  what buys a second code. That difference belongs in the caller's own code,
+  where the order id lives, not behind a convenience method in this package.
+
 ## [0.27.0] — 2026-09-03
 
 ### Added
