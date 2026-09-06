@@ -11,6 +11,7 @@ use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
 use Emeq\HubSdk\Resources\ConnectSessions;
 use Emeq\HubSdk\Resources\Integrations;
+use Emeq\HubSdk\Resources\Itheorie;
 use Emeq\HubSdk\Resources\OAuth;
 
 class Hub
@@ -53,5 +54,10 @@ class Hub
     public function accounting(): Accounting
     {
         return new Accounting($this->connector, $this->accountIdResolver);
+    }
+
+    public function itheorie(): Itheorie
+    {
+        return new Itheorie($this->connector);
     }
 }
