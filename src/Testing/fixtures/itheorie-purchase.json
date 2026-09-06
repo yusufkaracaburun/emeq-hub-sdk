@@ -10,7 +10,7 @@
     "access_code": "ABCD1234",
     "expires_at": "2027-09-06T12:04:11+00:00",
     "login_url": "https://itheorie.test/inloggen",
-    "direct_login_url": "https://itheorie.test/auto-login/REDACTED-TOKEN",
+    "direct_login_url": "https://itheorie.test/auto-login/example-token",
     "name": "Jan Jansen",
     "email": "jan@example.com",
     "mobile_phone_number": "+31612345678"

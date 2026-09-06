@@ -657,7 +657,10 @@ MockClient::global(HubMock::itheorie()); // all five reads at once
 MockClient::global(['*/v1/itheorie/purchases*' => HubMock::itheoriePurchaseInFlight()]);
 ```
 
-Two shapes the captures settle, both easy to hand-write wrong:
+These five come from Hub's request stack driven with synthetic input rather
+than from a live purchase: buying one costs money, and a real response carries
+personal data and an auto-login link. Two shapes they settle, both easy to
+hand-write wrong:
 
 - A course `offer` carries bare floats — `"current_price": 9.7` — while a
   purchase `price` keeps the partner's object with a **string** amount:

@@ -45,10 +45,16 @@
   conflict has no business leaving documents hanging there. A case in
   `DocumentBookerTest` fails the moment that inheritance moves.
 
-- **`HubMock::itheorie()` and five captured fixtures.** Taken from Hub's own
-  request stack rather than a live purchase: buying one costs €9.70, and a real
-  purchase response carries a name, an e-mail address, a phone number and an
-  auto-login URL. The captures settle two shapes a hand-written mock gets wrong
+- **`HubMock::itheorie()` and five fixtures.** Not captured from a live purchase
+  but from Hub's own request stack driven with synthetic input — real
+  controllers, real normalisation, real envelope, invented payload. Buying a
+  code costs €9.70 and cannot be undone, and a real purchase response holds a
+  name, an e-mail address, a phone number and a `direct_login_url` that is
+  bearer-equivalent, so capturing one would commit a live credential to satisfy
+  a rule about accuracy. `CONTEXT.md` now records this route as the sanctioned
+  one whenever a response carries personal data or a credential.
+
+  They still settle two shapes a hand-written mock gets wrong
   — a course `offer` holds bare floats (`"current_price": 9.7`) while a purchase
   `price` keeps the partner's object with a *string* amount
   (`{"amount": "9.70"}`), and both `access_code` and `expires_at` can be `null`
