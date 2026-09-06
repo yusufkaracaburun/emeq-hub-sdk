@@ -84,6 +84,7 @@ class HubException extends Exception
             $status === 404 => new NotFoundException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 422, $category === 'VALIDATION_ERROR' => new ValidationException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 429 => new RateLimitException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
+            $status === 409 && $error === 'purchase_in_flight' => new PurchaseInFlight($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status >= 500 => new ServerException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             default => new self($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
         };

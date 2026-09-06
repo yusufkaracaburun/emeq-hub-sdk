@@ -135,6 +135,15 @@ it('records a rate limit or an upstream outage instead of losing the attempt', f
         ->and($record->booked_at)->toBeNull();
 })->with([429, 500, 503]);
 
+it('keeps a conflicted itheorie purchase out of the unavailable branch', function (): void {
+    mockHub(hubError('purchase_in_flight', 409, 'CONFLICT', retryable: false));
+
+    expect(fn () => booker()->book(canonicalDocument()))
+        ->not->toThrow(BookingTemporarilyUnavailable::class);
+
+    expect(HubDocument::query()->where('status', HubDocument::STATUS_UNAVAILABLE)->count())->toBe(0);
+});
+
 it('records an interrupted send as unknown rather than losing the attempt', function (): void {
     mockHub(MockResponse::make()->throw(new RuntimeException('cURL error 28: Operation timed out')));
 
