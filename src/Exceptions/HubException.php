@@ -82,9 +82,9 @@ class HubException extends Exception
             $status === 401, $category === 'AUTHENTICATION_ERROR' => new AuthenticationException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 403, $category === 'AUTHORIZATION_ERROR' => new AuthorizationException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 404 => new NotFoundException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
+            $status === 409 && $error === 'purchase_in_flight' => new PurchaseInFlight($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 422, $category === 'VALIDATION_ERROR' => new ValidationException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status === 429 => new RateLimitException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
-            $status === 409 && $error === 'purchase_in_flight' => new PurchaseInFlight($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             $status >= 500 => new ServerException($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
             default => new self($message, $error, $category, $requestId, $status, $previous, $retryAfter, $retryable, $errors),
         };

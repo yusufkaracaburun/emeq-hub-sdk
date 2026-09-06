@@ -135,11 +135,14 @@ it('records a rate limit or an upstream outage instead of losing the attempt', f
         ->and($record->booked_at)->toBeNull();
 })->with([429, 500, 503]);
 
-it('keeps a conflicted itheorie purchase out of the unavailable branch', function (): void {
+it('records a conflicted itheorie purchase as rejected, not as unavailable', function (): void {
     mockHub(hubError('purchase_in_flight', 409, 'CONFLICT', retryable: false));
 
-    expect(fn () => booker()->book(canonicalDocument()))
-        ->not->toThrow(BookingTemporarilyUnavailable::class);
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_REJECTED)
+        ->and($record->error)->toBe('purchase_in_flight')
+        ->and($record->booked_at)->toBeNull();
 
     expect(HubDocument::query()->where('status', HubDocument::STATUS_UNAVAILABLE)->count())->toBe(0);
 });
