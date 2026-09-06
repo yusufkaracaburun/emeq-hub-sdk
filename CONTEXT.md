@@ -62,12 +62,15 @@ Rules:
   envelope, invented payload. The rule exists so the *shape* comes from Hub
   rather than from memory, and that route delivers it.
 
-  The iTheorie fixtures are the case. Buying a code costs EUR 9.70 and cannot
-  be undone, and a real purchase response holds a name, an e-mail address, a
-  phone number and a `direct_login_url` — an auto-login link, which is
-  bearer-equivalent. Capturing one would put a live credential in this
-  repository to satisfy a rule about accuracy. Do not "fix" these five files by
-  capturing a real purchase.
+  Personal data and credentials are the whole gate. Cost, side effects, or an
+  endpoint being awkward to reach are not — capture those the normal way.
+
+  The iTheorie fixtures are the case that opened it: a real purchase response
+  holds a name, an e-mail address, a phone number and a `direct_login_url`, an
+  auto-login link that is bearer-equivalent. Capturing one would put a live
+  credential in this repository to satisfy a rule about accuracy. That the
+  purchase also costs EUR 9.70 and cannot be undone is true, and is not the
+  reason. Do not "fix" these five files by capturing a real purchase.
 - Every failure a consumer can hit is a `HubException` — including configuration
   mistakes, so one catch clause suffices.
 
