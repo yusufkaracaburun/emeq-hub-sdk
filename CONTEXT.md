@@ -55,6 +55,22 @@ Rules:
 - `Testing/fixtures/*.json` are captured Hub responses, never invented ones. A
   new fixture comes from `tools/capture-fixtures.php` and gets redacted before
   it lands; an endpoint that has not been captured gets no factory.
+
+  One exception, and it is not a loophole. When a real response would carry
+  personal data or a credential, drive Hub's own request stack with synthetic
+  input instead and capture that: real controllers, real normalisation, real
+  envelope, invented payload. The rule exists so the *shape* comes from Hub
+  rather than from memory, and that route delivers it.
+
+  Personal data and credentials are the whole gate. Cost, side effects, or an
+  endpoint being awkward to reach are not — capture those the normal way.
+
+  The iTheorie fixtures are the case that opened it: a real purchase response
+  holds a name, an e-mail address, a phone number and a `direct_login_url`, an
+  auto-login link that is bearer-equivalent. Capturing one would put a live
+  credential in this repository to satisfy a rule about accuracy. That the
+  purchase also costs EUR 9.70 and cannot be undone is true, and is not the
+  reason. Do not "fix" these five files by capturing a real purchase.
 - Every failure a consumer can hit is a `HubException` — including configuration
   mistakes, so one catch clause suffices.
 

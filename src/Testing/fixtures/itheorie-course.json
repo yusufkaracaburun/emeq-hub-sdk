@@ -1,0 +1,20 @@
+{
+    "id": "01GC7ABB22TT7Y6883YPVHFCG5",
+    "license": "B",
+    "locale": "nl",
+    "title": "Auto theorie",
+    "description": "Complete theoriecursus voor rijbewijs B.",
+    "image": "https://cdn.itheorie.test/courses/b.png",
+    "published_at": "2025-01-06T09:00:00+00:00",
+    "updated_at": "2026-08-14T11:31:00+00:00",
+    "chapters": [],
+    "exams": [],
+    "theory_lessons": [],
+    "offer": {
+        "original_price": 12.5,
+        "current_price": 9.7,
+        "current_price_details": null,
+        "vat": 21,
+        "suggested_retail_price": 34.95
+    }
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Emeq\HubSdk\Exceptions\AuthenticationException;
 use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\NotFoundException;
+use Emeq\HubSdk\Exceptions\PurchaseInFlight;
 use Emeq\HubSdk\Exceptions\ValidationException;
 use Emeq\HubSdk\Hub;
 use Emeq\HubSdk\Resources\Finding;
@@ -160,6 +161,11 @@ it('serves each factory from its own fixture, with the captured status', functio
         'error-unauthenticated' => [HubMock::unauthenticated(), 401],
         'error-not-found' => [HubMock::notFound(), 404],
         'error-invalid-query' => [HubMock::invalidQuery(), 400],
+        'itheorie-courses' => [HubMock::itheorieCourses(), 200],
+        'itheorie-course' => [HubMock::itheorieCourse(), 200],
+        'itheorie-purchase' => [HubMock::itheoriePurchase(), 200],
+        'itheorie-purchase-in-flight' => [HubMock::itheoriePurchaseInFlight(), 409],
+        'itheorie-student' => [HubMock::itheorieStudent(), 200],
     ];
 
     $served = [];
@@ -185,4 +191,23 @@ it('serves each factory from its own fixture, with the captured status', functio
 it('refuses a fixture name it does not ship', function (): void {
     expect(fn () => HubMock::fixture('not-a-fixture'))
         ->toThrow(HubException::class);
+});
+
+it('answers every itheorie read from the captured fixtures', function (): void {
+    MockClient::global(HubMock::itheorie());
+
+    $itheorie = app(Hub::class)->itheorie();
+
+    expect($itheorie->courses())->toBe(HubMock::fixture('itheorie-courses'))
+        ->and($itheorie->course('01GC7ABB22TT7Y6883YPVHFCG5'))->toBe(HubMock::fixture('itheorie-course'))
+        ->and($itheorie->purchase('01KC6P19PXV5RXM70B6BX78KR4'))->toBe(HubMock::fixture('itheorie-purchase'))
+        ->and($itheorie->student('ABCD1234'))->toBe(HubMock::fixture('itheorie-student'))
+        ->and($itheorie->studentDetailed('ABCD1234'))->toBe(HubMock::fixture('itheorie-student'));
+});
+
+it('serves a conflicted purchase as the exception a consumer has to handle', function (): void {
+    MockClient::global(['*/v1/itheorie/purchases*' => HubMock::itheoriePurchaseInFlight()]);
+
+    expect(fn () => app(Hub::class)->itheorie()->createPurchase(['course' => 'c-1'], 'order-4711'))
+        ->toThrow(PurchaseInFlight::class);
 });

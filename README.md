@@ -487,10 +487,31 @@ suite. `Http\*` is package-internal (BFF / Saloon).
 | `Hub::accounting()->referenceData()` | `GET /v1/accounting/reference-data` |
 | `Hub::accounting()->mapping()` / `updateMapping(...)` | `GET` / `PUT /v1/accounting/mapping` |
 | `Hub::accounting()->sync(...)` | `POST /v1/accounting/sync` |
+| `Hub::itheorie()->courses($page, $limit)` | `GET /v1/itheorie/courses` |
+| `Hub::itheorie()->course($id)` | `GET /v1/itheorie/courses/{course}` |
+| `Hub::itheorie()->createPurchase($payload, $idempotencyKey)` | `POST /v1/itheorie/purchases` |
+| `Hub::itheorie()->purchase($id)` | `GET /v1/itheorie/purchases/{purchase}` |
+| `Hub::itheorie()->student($accessCode)` | `GET /v1/itheorie/students/{accessCode}` |
+| `Hub::itheorie()->studentDetailed($accessCode)` | `GET /v1/itheorie/students/{accessCode}/detailed` |
 
 `$provider` is a free string (Hub discovery `key`) — no SDK allowlist.
 Account context uses `X-Account-Id` / `account_external_id` from
 `ResolvesAccountId` or an explicit argument.
+
+`itheorie()` is the exception to that last line: it sends no account context at
+all. Hub buys theory access codes under one reseller agreement of its own, so
+there is no connection to scope a call to, and binding `ResolvesAccountId`
+changes nothing about these six calls.
+
+Two methods a reader may look for and not find. There is no `purchases()` list:
+Hub deliberately exposes no list endpoint, because one reseller serves every
+consumer and an unfiltered list would hand out other consumers' names, e-mail
+addresses, phone numbers and auto-login links. Read your own purchases from your
+own records. There is no `token()` either — Hub holds that credential now, which
+is the whole point of routing through it.
+
+`courses()` returns Hub's `{"links": ..., "data": [...]}` envelope rather than a
+bare list, so paging information survives the call.
 
 Every request carries `User-Agent: emeq-hub-sdk/{version} php/{version}
 laravel/{version}` and `X-Emeq-Sdk-Version`, so Hub can tell which consumers run
@@ -514,6 +535,7 @@ Envelope fields map to public properties: `error`, `category`, `requestId`, `sta
 | 404 | `NotFoundException` |
 | 422 / `VALIDATION_ERROR` | `ValidationException` |
 | 429 | `RateLimitException` |
+| 409 `purchase_in_flight` | `PurchaseInFlight` |
 | ≥ 500 | `ServerException` |
 | Missing `EMEQ_HUB_*`, unresolvable account id, bad `return_path`, non-lockable cache store | `MissingConfigurationException` (503) |
 
@@ -525,6 +547,25 @@ Log `requestId` when present; it matches Hub `X-Request-Id` / envelope `request_
 `RateLimitException::$retryAfter` carries Hub's `Retry-After` in seconds, whether
 Hub sent a number of seconds or an HTTP date. A date already in the past reads as
 `0`, never as a negative wait.
+
+### A purchase that costs money
+
+`createPurchase()` buys a theory access code. It is billed and cannot be undone,
+so the rules around it are stricter than anywhere else in this SDK.
+
+The SDK never invents an `Idempotency-Key`. You pass one, and you derive it from
+something stable on your side — an order id, not a timestamp. The same key always
+returns the first purchase and never buys a second code, days later included.
+
+`PurchaseInFlight` (409) means an earlier attempt with that key died without a
+known outcome. **Do not retry it.** A code may already have been bought and
+charged; someone has to look. It carries `retryable: false` and is deliberately
+not a `ServerException`, so a generic retry policy leaves it alone.
+
+A `ServerException` (502/504) is the opposite: the outcome is unknown, but
+re-sending *the same key* is safe. It answers `PurchaseInFlight` instead of
+buying twice. Sending a **fresh** key after such a failure is what buys a second
+code, so never generate a new one on retry.
 
 ### What the BFF routes answer
 
@@ -606,6 +647,30 @@ MockClient::global(['*/v1/accounting/documents' => HubMock::createDocument()]);
 // The raw payload, to assert against or to build a variant from:
 $mapping = HubMock::fixture('mapping')['mapping'];
 ```
+
+iTheorie has its own map:
+
+```php
+MockClient::global(HubMock::itheorie()); // all five reads at once
+
+// The conflict a purchase flow has to handle, on its own:
+MockClient::global(['*/v1/itheorie/purchases*' => HubMock::itheoriePurchaseInFlight()]);
+```
+
+These five come from Hub's request stack driven with synthetic input rather
+than from a live purchase: buying one costs money, and a real response carries
+personal data and an auto-login link. Two shapes they settle, both easy to
+hand-write wrong:
+
+- A course `offer` carries bare floats — `"current_price": 9.7` — while a
+  purchase `price` keeps the partner's object with a **string** amount:
+  `{"amount": "9.70", "currency": "EUR"}`. They are not the same money shape.
+- `access_code` and `expires_at` can both be `null` on a `200`. Render "valid
+  until" only when it is filled.
+
+`student()` and `studentDetailed()` answer the same shape, so one fixture serves
+both; the detailed call only fills `progression` where the plain one leaves it
+`null`.
 
 What the captures show, and what a hand-written mock tends to get wrong:
 
