@@ -9,6 +9,7 @@ use Emeq\HubSdk\Tests\TestCase;
 uses(BookingTestCase::class)->in('Feature/Booking');
 uses(TestCase::class)->in('Feature/HubClientTest.php');
 uses(TestCase::class)->in('Feature/HubMockTest.php');
+uses(TestCase::class)->in('Feature/ItheorieTest.php');
 uses(TestCase::class)->in('Feature/HubDoctorTest.php');
 uses(TestCase::class)->in('Feature/WebhookProcessingTest.php');
 uses(TestCase::class)->in('Feature/PublishAssetsTest.php');

@@ -1,0 +1,17 @@
+{
+    "id": "01KC6P19PXV5RXM70B6BX78KR4",
+    "invoice": "F-2026-00812",
+    "created_at": "2026-09-06T12:04:11+00:00",
+    "price": {
+        "amount": "9.70",
+        "currency": "EUR"
+    },
+    "subscription": null,
+    "access_code": "ABCD1234",
+    "expires_at": "2027-09-06T12:04:11+00:00",
+    "login_url": "https://itheorie.test/inloggen",
+    "direct_login_url": "https://itheorie.test/auto-login/REDACTED-TOKEN",
+    "name": "Jan Jansen",
+    "email": "jan@example.com",
+    "mobile_phone_number": "+31612345678"
+}

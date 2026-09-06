@@ -1,0 +1,35 @@
+{
+    "id": "01KC6P1A00V5RXM70B6BX78ZZ9",
+    "access_code": "ABCD1234",
+    "created_at": "2026-09-06T12:04:12+00:00",
+    "expires_at": "2027-09-06T12:04:12+00:00",
+    "activated_at": "2026-09-06T13:22:40+00:00",
+    "last_seen_at": "2026-09-06T18:51:03+00:00",
+    "course": {
+        "id": "01GC7ABB22TT7Y6883YPVHFCG5",
+        "license": "B",
+        "locale": "nl",
+        "title": "Auto theorie",
+        "description": "Complete theoriecursus voor rijbewijs B.",
+        "image": "https://cdn.itheorie.test/courses/b.png",
+        "published_at": "2025-01-06T09:00:00+00:00",
+        "updated_at": "2026-08-14T11:31:00+00:00",
+        "chapters": [],
+        "exams": [],
+        "theory_lessons": [],
+        "offer": {
+            "original_price": 12.5,
+            "current_price": 9.7,
+            "current_price_details": null,
+            "vat": 21,
+            "suggested_retail_price": 34.95
+        }
+    },
+    "course_completed_at": null,
+    "refresher_course_activated_at": null,
+    "blocked_at": null,
+    "blocked_reason": null,
+    "progress": 42,
+    "progress_url": "https://itheorie.test/voortgang/ABCD1234",
+    "progression": null
+}

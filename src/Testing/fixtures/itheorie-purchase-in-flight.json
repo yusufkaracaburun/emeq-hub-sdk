@@ -1,0 +1,7 @@
+{
+    "error": "purchase_in_flight",
+    "message": "Een eerdere poging met deze sleutel is afgebroken zonder bekende uitkomst. Mogelijk is er al een code gekocht; neem contact op voordat je het opnieuw probeert.",
+    "category": "CONFLICT",
+    "retryable": false,
+    "request_id": "01M1VRTRQE96QTNWRX93MRXHMH"
+}

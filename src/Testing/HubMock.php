@@ -89,6 +89,43 @@ final class HubMock
         return MockResponse::make(self::fixture('error-invalid-query'), 400);
     }
 
+    public static function itheorieCourses(): MockResponse
+    {
+        return MockResponse::make(self::fixture('itheorie-courses'), 200);
+    }
+
+    public static function itheorieCourse(): MockResponse
+    {
+        return MockResponse::make(self::fixture('itheorie-course'), 200);
+    }
+
+    public static function itheoriePurchase(): MockResponse
+    {
+        return MockResponse::make(self::fixture('itheorie-purchase'), 200);
+    }
+
+    public static function itheoriePurchaseInFlight(): MockResponse
+    {
+        return MockResponse::make(self::fixture('itheorie-purchase-in-flight'), 409);
+    }
+
+    public static function itheorieStudent(): MockResponse
+    {
+        return MockResponse::make(self::fixture('itheorie-student'), 200);
+    }
+
+    /** @return array<string, MockResponse> */
+    public static function itheorie(): array
+    {
+        return [
+            '*/v1/itheorie/courses/*' => self::itheorieCourse(),
+            '*/v1/itheorie/courses*' => self::itheorieCourses(),
+            '*/v1/itheorie/purchases*' => self::itheoriePurchase(),
+            '*/v1/itheorie/students/*/detailed' => self::itheorieStudent(),
+            '*/v1/itheorie/students/*' => self::itheorieStudent(),
+        ];
+    }
+
     /** @return array<string, MockResponse> */
     public static function accounting(): array
     {
