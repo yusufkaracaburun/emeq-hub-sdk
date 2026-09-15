@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.28.1] — 2026-09-15
+
+### Fixed
+
+- **`registerHubWebhookClientConfig()` no longer logs on every request.** Spatie's
+  webhook-client ships a scaffold `default` config entry with an empty
+  `process_webhook_job`; the package correctly drops it to avoid an `InvalidConfig`
+  crash, but logged that drop at `info` level on every incoming webhook, forever,
+  in any consumer that never fills in the placeholder — pure noise with no
+  action attached. The known placeholder is no longer logged; a genuinely
+  unexpected unprocessable entry (any other name) still logs, now at `warning`.
+
 ## [0.28.0] — 2026-09-06
 
 ### Added
