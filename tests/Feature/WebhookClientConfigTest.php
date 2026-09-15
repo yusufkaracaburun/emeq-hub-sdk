@@ -47,7 +47,7 @@ test('upserts existing emeq-hub webhook-client entry from hub.webhook', function
         ->and($other['signing_secret'])->toBe('keep-me');
 });
 
-test('drops the placeholder entry Spatie merges in by default', function () {
+test('drops the placeholder entry Spatie merges in by default without logging', function () {
     Log::spy();
 
     config()->set('webhook-client.configs', [
@@ -67,9 +67,31 @@ test('drops the placeholder entry Spatie merges in by default', function () {
     expect(collect($configs)->firstWhere('name', 'default'))->toBeNull()
         ->and(collect($configs)->firstWhere('name', 'emeq-hub'))->not->toBeNull();
 
-    Log::shouldHaveReceived('info')
+    Log::shouldNotHaveReceived('warning');
+    Log::shouldNotHaveReceived('info');
+});
+
+test('logs a warning when an unrelated config is unprocessable', function () {
+    Log::spy();
+
+    config()->set('webhook-client.configs', [
+        [
+            'name' => 'mollie',
+            'process_webhook_job' => '',
+        ],
+    ]);
+
+    $provider = new HubServiceProvider($this->app);
+    $method = new ReflectionMethod($provider, 'registerHubWebhookClientConfig');
+    $method->invoke($provider);
+
+    $configs = config('webhook-client.configs');
+
+    expect(collect($configs)->firstWhere('name', 'mollie'))->toBeNull();
+
+    Log::shouldHaveReceived('warning')
         ->withArgs(fn (string $message, array $context): bool => $message === 'hub.webhook.dropped_unprocessable_config'
-            && $context['names'] === ['default'])
+            && $context['names'] === ['mollie'])
         ->once();
 });
 

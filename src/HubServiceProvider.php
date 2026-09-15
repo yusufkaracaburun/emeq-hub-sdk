@@ -143,13 +143,17 @@ class HubServiceProvider extends PackageServiceProvider
                 return true;
             }
 
-            $dropped[] = is_string($entry['name'] ?? null) ? $entry['name'] : 'unnamed';
+            $name = is_string($entry['name'] ?? null) ? $entry['name'] : 'unnamed';
+
+            if ($name !== 'default') {
+                $dropped[] = $name;
+            }
 
             return false;
         }));
 
         if ($dropped !== []) {
-            Log::info('hub.webhook.dropped_unprocessable_config', ['names' => $dropped]);
+            Log::warning('hub.webhook.dropped_unprocessable_config', ['names' => $dropped]);
         }
 
         return $kept;
