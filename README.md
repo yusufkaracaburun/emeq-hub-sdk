@@ -130,6 +130,28 @@ class HubAccountIdResolver implements ResolvesAccountId
 $this->app->bind(ResolvesAccountId::class, HubAccountIdResolver::class);
 ```
 
+Optionally bind `ResolvesConnectSessionContext` to send the connect page your
+`categories`, a `mode` (`manage` / `view`) and the `actor` for the logged-in
+user. Throw from it (e.g. `abort(403)`) to deny the session. Unbound, the
+connect-session route sends none of them.
+
+```php
+use Emeq\HubSdk\Contracts\ResolvesConnectSessionContext;
+use Illuminate\Contracts\Auth\Authenticatable;
+
+class HubConnectSessionContext implements ResolvesConnectSessionContext
+{
+    public function context(?Authenticatable $user): array
+    {
+        return [
+            'categories' => [['key' => 'fuel', 'label' => 'Brandstof', 'type' => 'expense']],
+            'mode' => $user?->can('manage-integrations') ? 'manage' : 'view',
+            'actor' => ['name' => $user->name, 'email' => $user->email],
+        ];
+    }
+}
+```
+
 ## Inbound Hub webhooks
 
 Spatie `webhook-client` bases live in the SDK; apps only wire tenancy + handlers.

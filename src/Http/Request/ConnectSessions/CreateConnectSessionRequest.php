@@ -15,10 +15,18 @@ class CreateConnectSessionRequest extends Request implements HasBody
 
     protected Method $method = Method::POST;
 
+    /**
+     * @param  list<array{key: string, label: string, type: 'expense'|'income'}>|null  $categories
+     * @param  'manage'|'view'|null  $mode
+     * @param  array{name: string, email: string}|null  $actor
+     */
     public function __construct(
         private readonly string $accountExternalId,
         private readonly ?string $displayName = null,
         private readonly ?string $returnUrl = null,
+        private readonly ?array $categories = null,
+        private readonly ?string $mode = null,
+        private readonly ?array $actor = null,
     ) {}
 
     public function resolveEndpoint(): string
@@ -37,6 +45,18 @@ class CreateConnectSessionRequest extends Request implements HasBody
 
         if ($this->returnUrl !== null) {
             $body['return_url'] = $this->returnUrl;
+        }
+
+        if ($this->categories !== null) {
+            $body['categories'] = $this->categories;
+        }
+
+        if ($this->mode !== null) {
+            $body['mode'] = $this->mode;
+        }
+
+        if ($this->actor !== null) {
+            $body['actor'] = $this->actor;
         }
 
         return $body;

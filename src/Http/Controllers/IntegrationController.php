@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emeq\HubSdk\Http\Controllers;
 
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
+use Emeq\HubSdk\Contracts\ResolvesConnectSessionContext;
 use Emeq\HubSdk\Exceptions\HubException;
 use Emeq\HubSdk\Exceptions\MissingConfigurationException;
 use Emeq\HubSdk\Exceptions\RateLimitException;
@@ -21,6 +22,7 @@ class IntegrationController extends Controller
     public function __construct(
         private readonly Hub $hub,
         private readonly ?ResolvesAccountId $accountIdResolver = null,
+        private readonly ?ResolvesConnectSessionContext $connectSessionContext = null,
     ) {}
 
     /**
@@ -46,9 +48,10 @@ class IntegrationController extends Controller
      * Mint Hub's hosted connect handoff page URL.
      *
      * Deliberately reads no input from the request body or query: the account
-     * comes from ResolvesAccountId and the return path from config. The request
-     * is here for the app's own scheme + host, nothing else — which is why
-     * there is no FormRequest.
+     * comes from ResolvesAccountId, the return path from config, and categories,
+     * mode and actor from ResolvesConnectSessionContext when bound. The request
+     * is here for the app's own scheme + host and the authenticated user, nothing
+     * else — which is why there is no FormRequest.
      */
     public function connectSession(Request $request): JsonResponse
     {
@@ -58,10 +61,14 @@ class IntegrationController extends Controller
                 $request->getSchemeAndHttpHost(),
                 $this->returnPath(),
             );
+            $context = $this->connectSessionContext?->context($request->user()) ?? [];
             $session = $this->hub->connectSessions()->create(
                 accountExternalId: $externalId,
                 displayName: $this->accountIdResolver->displayName(),
                 returnUrl: $returnUrl,
+                categories: $context['categories'] ?? null,
+                mode: $context['mode'] ?? null,
+                actor: $context['actor'] ?? null,
             );
 
             return response()->json($this->connectSessionResponse($session));
