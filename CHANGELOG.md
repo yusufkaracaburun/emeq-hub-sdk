@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.29.0] — 2026-09-30
+
+### Added
+
+- **Connect sessions carry categories, mode and actor.** `ConnectSessions::create()`
+  takes optional `categories`, `mode` (`manage` / `view`) and `actor`, sent to
+  `POST /v1/connect-sessions` only when given. A new optional contract,
+  `ResolvesConnectSessionContext::context(?Authenticatable $user): array`, feeds
+  them to the `connect-session` route for the logged-in user; an exception it
+  throws (e.g. `abort(403)`) propagates, so Laravel answers 403. Unbound, the
+  route behaves as before.
+
+## [0.28.2] — 2026-09-30
+
+### Changed
+
+- **`mapping_failed` is a rejection.** `DocumentBooker` records a document the
+  Hub cannot map as `rejected` with its code instead of `failed`, and no longer
+  reports it: a missing ledger mapping is a setup gap, not an application error.
+
 ## [0.28.1] — 2026-09-15
 
 ### Fixed

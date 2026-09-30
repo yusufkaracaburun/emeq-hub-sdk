@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use Emeq\HubSdk\Contracts\ResolvesAccountId;
+use Emeq\HubSdk\Contracts\ResolvesConnectSessionContext;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\GenericUser;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 use Saloon\Http\Request;
@@ -78,6 +82,76 @@ describe('with account resolver', function (): void {
                 && ($body['display_name'] ?? null) === 'Demo BV'
                 && str_ends_with((string) ($body['return_url'] ?? ''), '/integrations/oauth-callback');
         });
+    });
+
+    it('connect-session passes the consumer context through to Hub', function (): void {
+        $this->app->bind(ResolvesConnectSessionContext::class, fn (): ResolvesConnectSessionContext => new class implements ResolvesConnectSessionContext
+        {
+            public function context(?Authenticatable $user): array
+            {
+                return [
+                    'categories' => [['key' => 'fuel', 'label' => 'Brandstof', 'type' => 'expense']],
+                    'mode' => 'view',
+                    'actor' => ['name' => (string) $user?->getAuthIdentifier(), 'email' => 'jan@example.test'],
+                ];
+            }
+        });
+
+        $mock = new MockClient([
+            CreateConnectSessionRequest::class => MockResponse::make(['url' => 'https://hub.example.test/connect'], 200),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->actingAs(new GenericUser(['id' => 'user-5']))
+            ->postJson('/api/integrations/connect-session')
+            ->assertOk();
+
+        $mock->assertSent(function (Request $request): bool {
+            if (! $request instanceof CreateConnectSessionRequest) {
+                return false;
+            }
+
+            $body = $request->body()->all();
+
+            return ($body['account_external_id'] ?? null) === 'tenant-77'
+                && ($body['categories'] ?? null) === [['key' => 'fuel', 'label' => 'Brandstof', 'type' => 'expense']]
+                && ($body['mode'] ?? null) === 'view'
+                && ($body['actor'] ?? null) === ['name' => 'user-5', 'email' => 'jan@example.test'];
+        });
+    });
+
+    it('connect-session sends no context when none is bound', function (): void {
+        $mock = new MockClient([
+            CreateConnectSessionRequest::class => MockResponse::make(['url' => 'https://hub.example.test/connect'], 200),
+        ]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->postJson('/api/integrations/connect-session')->assertOk();
+
+        $mock->assertSent(function (Request $request): bool {
+            if (! $request instanceof CreateConnectSessionRequest) {
+                return false;
+            }
+
+            return array_keys($request->body()->all()) === ['account_external_id', 'display_name', 'return_url'];
+        });
+    });
+
+    it('connect-session answers 403 when the context resolver denies the user', function (): void {
+        $this->app->bind(ResolvesConnectSessionContext::class, fn (): ResolvesConnectSessionContext => new class implements ResolvesConnectSessionContext
+        {
+            public function context(?Authenticatable $user): array
+            {
+                throw new AuthorizationException;
+            }
+        });
+
+        $mock = new MockClient([]);
+        app(HubConnector::class)->withMockClient($mock);
+
+        $this->postJson('/api/integrations/connect-session')->assertForbidden();
+
+        $mock->assertNothingSent();
     });
 
     it('connect-session narrows non-string Hub fields to null instead of leaking them', function (): void {

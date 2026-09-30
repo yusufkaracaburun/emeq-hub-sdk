@@ -9,6 +9,7 @@ use Emeq\HubSdk\Exceptions\NotFoundException;
 use Emeq\HubSdk\Exceptions\ValidationException;
 use Emeq\HubSdk\Http\HubConnector;
 use Emeq\HubSdk\Http\Request\Accounting\GetAccountingRequest;
+use Emeq\HubSdk\Http\Request\ConnectSessions\CreateConnectSessionRequest;
 use Emeq\HubSdk\Http\Request\Integrations\ListIntegrationsRequest;
 use Emeq\HubSdk\Http\Request\OAuth\InitOAuthRequest;
 use Emeq\HubSdk\Hub;
@@ -327,4 +328,38 @@ it('names itself and its version on every request it sends', function (): void {
         ->and($headers->get('User-Agent'))->toContain(' laravel/')
         ->and($headers->get(SdkIdentity::VERSION_HEADER))->toBe(SdkIdentity::version())
         ->and($headers->get(SdkIdentity::VERSION_HEADER))->not->toBe('unknown');
+});
+
+it('sends categories, mode and actor on a connect session when given', function (): void {
+    $mock = new MockClient([
+        CreateConnectSessionRequest::class => MockResponse::make(['url' => 'https://hub.example.test/connect'], 200),
+    ]);
+    app(HubConnector::class)->withMockClient($mock);
+
+    app(Hub::class)->connectSessions()->create(
+        accountExternalId: 'tenant-1',
+        categories: [['key' => 'fuel', 'label' => 'Brandstof', 'type' => 'expense']],
+        mode: 'view',
+        actor: ['name' => 'Jan', 'email' => 'jan@example.test'],
+    );
+
+    $mock->assertSent(fn (CreateConnectSessionRequest $request): bool => $request->body()->all() === [
+        'account_external_id' => 'tenant-1',
+        'categories' => [['key' => 'fuel', 'label' => 'Brandstof', 'type' => 'expense']],
+        'mode' => 'view',
+        'actor' => ['name' => 'Jan', 'email' => 'jan@example.test'],
+    ]);
+});
+
+it('leaves categories, mode and actor out of a connect session when not given', function (): void {
+    $mock = new MockClient([
+        CreateConnectSessionRequest::class => MockResponse::make(['url' => 'https://hub.example.test/connect'], 200),
+    ]);
+    app(HubConnector::class)->withMockClient($mock);
+
+    app(Hub::class)->connectSessions()->create(accountExternalId: 'tenant-1');
+
+    $mock->assertSent(fn (CreateConnectSessionRequest $request): bool => $request->body()->all() === [
+        'account_external_id' => 'tenant-1',
+    ]);
 });
