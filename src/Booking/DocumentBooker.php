@@ -23,7 +23,7 @@ class DocumentBooker
 {
     protected const TRANSIENT_ERRORS = ['idempotency_request_in_progress', 'document_sync_in_progress'];
 
-    protected const REJECTIONS = ['document_already_posted', 'idempotency_key_reuse', 'upstream_rejected'];
+    protected const REJECTIONS = ['document_already_posted', 'idempotency_key_reuse', 'upstream_rejected', 'mapping_failed'];
 
     protected const REJECTED_CATEGORIES = ['CONFLICT', 'PROVIDER_ERROR'];
 
@@ -194,11 +194,11 @@ class DocumentBooker
 
     protected function isRejection(HubException $e): bool
     {
-        if ($e->retryable === null) {
-            return in_array($e->error, static::REJECTIONS, true);
+        if (in_array($e->error, static::REJECTIONS, true)) {
+            return true;
         }
 
-        return in_array($e->category, static::REJECTED_CATEGORIES, true);
+        return $e->retryable !== null && in_array($e->category, static::REJECTED_CATEGORIES, true);
     }
 
     /**
