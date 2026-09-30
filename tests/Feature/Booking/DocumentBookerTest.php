@@ -14,6 +14,7 @@ use Emeq\HubSdk\Testing\HubMock;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Schema;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
@@ -104,13 +105,36 @@ it('records a refusal as rejected, not as failed', function (): void {
         ->and($record->error_message)->toBe('Hub says document_already_posted.');
 });
 
+it('rejects a document Hub cannot map, without reporting it as a bug', function (array $retryable): void {
+    Exceptions::fake();
+
+    mockHub(MockResponse::make([
+        'status' => 'failed',
+        'external_id' => 'inv-1',
+        'error' => 'mapping_failed',
+        'message' => 'No ledger mapping for category "werk".',
+        ...$retryable,
+    ], 422));
+
+    $record = booker()->book(canonicalDocument());
+
+    expect($record->status)->toBe(HubDocument::STATUS_REJECTED)
+        ->and($record->error)->toBe('mapping_failed')
+        ->and(HubDocument::query()->sole()->status)->toBe(HubDocument::STATUS_REJECTED);
+
+    Exceptions::assertNothingReported();
+})->with([
+    'no retryable' => [[]],
+    'retryable false' => [['retryable' => false]],
+]);
+
 it('records an unexpected Hub error as failed', function (): void {
-    mockHub(hubError('mapping_failed'));
+    mockHub(hubError('unexpected_error'));
 
     $record = booker()->book(canonicalDocument());
 
     expect($record->status)->toBe(HubDocument::STATUS_FAILED)
-        ->and($record->error)->toBe('mapping_failed');
+        ->and($record->error)->toBe('unexpected_error');
 });
 
 it('leaves no row when Hub is still working on the same key', function (): void {
@@ -427,7 +451,7 @@ it('refuses a lock that would expire while the send is still in flight', functio
 });
 
 it('records which Hub request decided a failure', function (): void {
-    mockHub(hubError('mapping_failed'));
+    mockHub(hubError('unexpected_error'));
 
     $record = booker()->book(canonicalDocument());
 
@@ -480,7 +504,7 @@ it('reads rejection off the category once Hub has an opinion', function (): void
 });
 
 it('keeps a fixable failure out of the rejected column', function (): void {
-    mockHub(hubError('mapping_failed', 422, 'REFERENCE_MAPPING_MISSING', retryable: false));
+    mockHub(hubError('unexpected_error', 422, 'REFERENCE_MAPPING_MISSING', retryable: false));
 
     expect(booker()->book(canonicalDocument())->status)->toBe(HubDocument::STATUS_FAILED);
 });
@@ -497,12 +521,12 @@ it('books on against a ledger without the trace columns', function (): void {
     });
     HubDocument::forgetTraceSupport();
 
-    mockHub(hubError('mapping_failed'));
+    mockHub(hubError('unexpected_error'));
 
     $record = booker()->book(canonicalDocument());
 
     expect($record->status)->toBe(HubDocument::STATUS_FAILED)
-        ->and($record->error)->toBe('mapping_failed');
+        ->and($record->error)->toBe('unexpected_error');
 });
 
 it('always leaves a message on the row, so Hub keeps the last word', function (): void {
