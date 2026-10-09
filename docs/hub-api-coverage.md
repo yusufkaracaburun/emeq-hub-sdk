@@ -3,13 +3,13 @@
 Which `/v1/*` endpoints of emeq-hub this SDK wraps, and which it does not yet.
 This doubles as a progress doc: every ⬜ row is backlog.
 
-**As of** 2026-08-18 · **Hub** `9c1561e` · **SDK** `0.23.0`
+**As of** 2026-10-09 · **Hub** `55760e2` · **SDK** `0.30.0`
 
-Re-checked against Hub `9c1561e` — the deployed relation ladder: no `/v1` route
-has been added or removed since the previous stamp, so every count below still holds. What changed in that window
-is behaviour behind routes already listed — the relation ladder on
-`POST /accounting/documents`, `retryable` in the error envelope, and full
-skiptoken paging on the mirror reads. Hub also grew a signed, non-`/v1` surface
+Re-checked against Hub `55760e2`. Since the previous stamp (`9c1561e`) the Hub
+added two provider surfaces behind their own feature flags: iTheorie (6 routes,
+wrapped in 0.28.0) and document extraction (3 routes, wrapped in 0.30.0). 0.30.0
+also wrapped `POST /v1/connections`, which extraction needs to switch on per
+Account. Hub also has a signed, non-`/v1` surface
 for its own connect drawer (`/connect/{account}/{provider}/manage*`); it is not
 client API and is deliberately absent from this table.
 
@@ -36,6 +36,8 @@ server side and says nothing about what this SDK supports — hence this documen
 - [Accounts and connections](#accounts-and-connections)
 - [Accounting](#accounting)
 - [Exact pass-through](#exact-pass-through)
+- [iTheorie](#itheorie)
+- [Document extraction](#document-extraction)
 - [Billing](#billing)
 - [Reaching what is not wrapped](#reaching-what-is-not-wrapped)
 - [Suggested order](#suggested-order)
@@ -60,10 +62,11 @@ grep -rn -A 3 'function resolveEndpoint' src/Http/Request
 
 ## Status
 
-Scoped to Exact, the only provider connected so far. The Hub also exposes a
-Mollie surface (29 endpoints across payments, Connect and account
-subscriptions) and a Snelstart pass-through; both sit behind their own feature
-flags and are left out here until they are actually in use.
+Scoped to the providers a consumer app uses through this SDK: Exact, iTheorie
+and document extraction. The Hub also exposes a Mollie surface (payments,
+Connect and account subscriptions), a Snelstart pass-through and a DataForSEO
+surface; they sit behind their own feature flags and are left out here until
+they are actually in use.
 
 | Area | Endpoints | Wrapped |
 |---|---:|---:|
@@ -72,7 +75,9 @@ flags and are left out here until they are actually in use.
 | Accounting | 13 | 13 |
 | Exact pass-through | 5 | 0 |
 | Billing | 1 | 0 |
-| **Total (in scope)** | **28** | **21** |
+| iTheorie | 6 | 6 |
+| Document extraction | 3 | 3 |
+| **Total (in scope)** | **37** | **30** |
 
 Counts exclude the OAuth callbacks (browser redirects, listed below for
 completeness) and `/v1/admin/billing/*` (Emeq-internal, behind `emeq.admin`).
@@ -145,6 +150,33 @@ The first four overlap functionally with `ledger-accounts`, `tax-codes` and
 `customers`/`suppliers` from the accounting layer. Anything that wants to stay
 provider-independent should use those; this route exists for Exact-specific
 fields.
+
+## iTheorie
+
+Behind the `itheorie` feature flag. `POST /purchases` requires an
+`Idempotency-Key` and has its own throttle.
+
+| | Endpoint | Ability | SDK | |
+|---|---|---|---|---|
+| GET | `/v1/itheorie/courses` | `itheorie:read` \| `itheorie:write` | `itheorie()->courses()` | ✅ |
+| GET | `/v1/itheorie/courses/{course}` | `itheorie:read` \| `itheorie:write` | `itheorie()->course()` | ✅ |
+| POST | `/v1/itheorie/purchases` | `itheorie:write` | `itheorie()->createPurchase()` | ✅ |
+| GET | `/v1/itheorie/purchases/{purchase}` | `itheorie:read` \| `itheorie:write` | `itheorie()->purchase()` | ✅ |
+| GET | `/v1/itheorie/students/{accessCode}` | `itheorie:read` \| `itheorie:write` | `itheorie()->student()` | ✅ |
+| GET | `/v1/itheorie/students/{accessCode}/detailed` | `itheorie:read` \| `itheorie:write` | `itheorie()->studentDetailed()` | ✅ |
+
+## Document extraction
+
+Behind the `extraction` feature flag. Switch it on per Account with
+`connections()->create($accountId, 'extraction')`. A run answers `202` with a
+`run_id`; the result only arrives as the `extraction.run.completed` or
+`extraction.run.failed` webhook, there is no GET on a run.
+
+| | Endpoint | Ability | SDK | |
+|---|---|---|---|---|
+| PUT | `/v1/extraction/profiles/{key}/versions/{version}` | `extraction:write` | `extraction()->putProfileVersion()` | ✅ |
+| POST | `/v1/extraction/runs` | `extraction:write` | `extraction()->runText()` / `runFile()` | ✅ |
+| PUT | `/v1/extraction/hints` | `extraction:write` | `extraction()->putHints()` | ✅ |
 
 ## Billing
 
