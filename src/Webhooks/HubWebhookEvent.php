@@ -30,6 +30,10 @@ enum HubWebhookEvent: string
 
     case CONNECTION_REVOKED = 'connection.revoked';
 
+    case EXTRACTION_RUN_COMPLETED = 'extraction.run.completed';
+
+    case EXTRACTION_RUN_FAILED = 'extraction.run.failed';
+
     case UNMAPPED = 'unmapped';
 
     public static function fromWire(mixed $value): self

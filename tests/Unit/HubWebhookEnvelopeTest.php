@@ -139,6 +139,8 @@ test('every event hub can send decodes to a known case', function (string $wire,
     ['accounting.ledger_account.changed', HubWebhookEvent::LEDGER_ACCOUNT_CHANGED],
     ['accounting.bank_statement.changed', HubWebhookEvent::BANK_STATEMENT_CHANGED],
     ['accounting.cash_statement.changed', HubWebhookEvent::CASH_STATEMENT_CHANGED],
+    ['extraction.run.completed', HubWebhookEvent::EXTRACTION_RUN_COMPLETED],
+    ['extraction.run.failed', HubWebhookEvent::EXTRACTION_RUN_FAILED],
 ]);
 
 test('an event this release does not know reads as unmapped', function () {
