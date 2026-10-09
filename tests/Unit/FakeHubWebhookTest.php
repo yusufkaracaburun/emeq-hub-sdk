@@ -106,3 +106,27 @@ test('salesInvoiceChanged can stage an echo of the consumers own write', functio
         ->and($echo->action)->toBe(HubWebhookAction::UPDATED)
         ->and($echo->hubLastWroteAt)->toBe('2026-08-12T10:00:00+00:00');
 });
+
+test('extractionRunCompleted builds a document run with both readings and their signals', function (): void {
+    $envelope = FakeHubWebhook::extractionRunCompleted('47', runId: 'run_1')->envelope();
+
+    expect($envelope->event)->toBe(HubWebhookEvent::EXTRACTION_RUN_COMPLETED)
+        ->and($envelope->provider)->toBe('extraction')
+        ->and($envelope->accountId)->toBe('47')
+        ->and($envelope->data)->toHaveKeys(['run_id', 'profile', 'version', 'readers', 'result', 'signals', 'pages'])
+        ->and($envelope->data['run_id'])->toBe('run_1')
+        ->and($envelope->data['signals'])->toHaveKeys(['differs', 'rows_only_in_second_read', 'review']);
+});
+
+test('extractionRunFailed carries the run and its reason', function (): void {
+    $envelope = FakeHubWebhook::extractionRunFailed('47', runId: 'run_2', reason: 'invalid_json')->envelope();
+
+    expect($envelope->event)->toBe(HubWebhookEvent::EXTRACTION_RUN_FAILED)
+        ->and($envelope->provider)->toBe('extraction')
+        ->and($envelope->data)->toBe([
+            'run_id' => 'run_2',
+            'profile' => 'timesheet',
+            'version' => 1,
+            'reason' => 'invalid_json',
+        ]);
+});

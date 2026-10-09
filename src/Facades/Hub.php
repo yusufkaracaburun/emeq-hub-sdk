@@ -9,6 +9,7 @@ use Emeq\HubSdk\Resources\Accounting;
 use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
 use Emeq\HubSdk\Resources\ConnectSessions;
+use Emeq\HubSdk\Resources\Extraction;
 use Emeq\HubSdk\Resources\Integrations;
 use Emeq\HubSdk\Resources\Itheorie;
 use Emeq\HubSdk\Resources\OAuth;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static Connections connections()
  * @method static Accounting accounting()
  * @method static Itheorie itheorie()
+ * @method static Extraction extraction()
  */
 class Hub extends Facade
 {

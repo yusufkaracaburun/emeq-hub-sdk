@@ -114,6 +114,26 @@ final class HubMock
         return MockResponse::make(self::fixture('itheorie-student'), 200);
     }
 
+    public static function extractionProfileVersion(): MockResponse
+    {
+        return MockResponse::make(self::fixture('extraction-profile-version'), 201);
+    }
+
+    public static function extractionHints(): MockResponse
+    {
+        return MockResponse::make(self::fixture('extraction-hints'), 200);
+    }
+
+    public static function extractionRun(): MockResponse
+    {
+        return MockResponse::make(self::fixture('extraction-run'), 202);
+    }
+
+    public static function connection(): MockResponse
+    {
+        return MockResponse::make(self::fixture('connection'), 201);
+    }
+
     /** @return array<string, MockResponse> */
     public static function itheorie(): array
     {
@@ -123,6 +143,17 @@ final class HubMock
             '*/v1/itheorie/purchases*' => self::itheoriePurchase(),
             '*/v1/itheorie/students/*/detailed' => self::itheorieStudent(),
             '*/v1/itheorie/students/*' => self::itheorieStudent(),
+        ];
+    }
+
+    /** @return array<string, MockResponse> */
+    public static function extraction(): array
+    {
+        return [
+            '*/v1/connections' => self::connection(),
+            '*/v1/extraction/profiles/*' => self::extractionProfileVersion(),
+            '*/v1/extraction/hints' => self::extractionHints(),
+            '*/v1/extraction/runs' => self::extractionRun(),
         ];
     }
 

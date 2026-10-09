@@ -1,0 +1,10 @@
+{
+    "id": 12,
+    "public_id": "con_01JQZ8F4XK2N7RVB3TDW6MPYAC",
+    "account_id": 42,
+    "provider": "extraction",
+    "status": "active",
+    "fingerprint": null,
+    "revoked_at": null,
+    "created_at": "2026-10-09T09:00:00+00:00"
+}

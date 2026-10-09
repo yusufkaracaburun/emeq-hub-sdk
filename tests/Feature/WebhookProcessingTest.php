@@ -563,6 +563,8 @@ test('hub webhook event constants match hub canonical vocabulary', function () {
         'billing.payment.changed',
         'billing.subscription.changed',
         'connection.revoked',
+        'extraction.run.completed',
+        'extraction.run.failed',
         'unmapped',
     ];
 

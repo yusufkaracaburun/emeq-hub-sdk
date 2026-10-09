@@ -4,11 +4,20 @@ declare(strict_types=1);
 
 namespace Emeq\HubSdk\Resources;
 
+use Emeq\HubSdk\Http\Request\Connections\CreateConnectionRequest;
 use Emeq\HubSdk\Http\Request\Connections\DeleteConnectionRequest;
 use Emeq\HubSdk\Http\Request\Connections\GetConnectionRequest;
 
 class Connections extends Resource
 {
+    /** @return array<string, mixed> */
+    public function create(string|int $accountId, string $provider): array
+    {
+        $response = $this->connector->send(new CreateConnectionRequest($accountId, $provider));
+
+        return $this->json($response->json());
+    }
+
     /** @return array<string, mixed> */
     public function get(string|int $connectionId): array
     {

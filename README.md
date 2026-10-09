@@ -495,6 +495,7 @@ suite. `Http\*` is package-internal (BFF / Saloon).
 | `Hub::integrations()->list(...)` | `GET /v1/integrations` |
 | `Hub::connectSessions()->create(...)` | `POST /v1/connect-sessions` |
 | `Hub::oauth()->init($provider, ...)` | `POST /v1/oauth/{provider}/init` |
+| `Hub::connections()->create($accountId, $provider)` | `POST /v1/connections` |
 | `Hub::connections()->get($id)` | `GET /v1/connections/{id}` |
 | `Hub::connections()->delete($id)` | `DELETE /v1/connections/{id}` |
 | `Hub::accounting()->validateDocument(...)` | `POST /v1/accounting/documents/validate` |
@@ -515,6 +516,10 @@ suite. `Http\*` is package-internal (BFF / Saloon).
 | `Hub::itheorie()->purchase($id)` | `GET /v1/itheorie/purchases/{purchase}` |
 | `Hub::itheorie()->student($accessCode)` | `GET /v1/itheorie/students/{accessCode}` |
 | `Hub::itheorie()->studentDetailed($accessCode)` | `GET /v1/itheorie/students/{accessCode}/detailed` |
+| `Hub::extraction()->putProfileVersion($key, $version, $schema, $instructions)` | `PUT /v1/extraction/profiles/{key}/versions/{version}` |
+| `Hub::extraction()->putHints($hints)` | `PUT /v1/extraction/hints` |
+| `Hub::extraction()->runText($profile, $version, $text, $idempotencyKey)` | `POST /v1/extraction/runs` |
+| `Hub::extraction()->runFile($profile, $version, $contents, $filename, $idempotencyKey)` | `POST /v1/extraction/runs` (multipart) |
 
 `$provider` is a free string (Hub discovery `key`) — no SDK allowlist.
 Account context uses `X-Account-Id` / `account_external_id` from
@@ -534,6 +539,102 @@ is the whole point of routing through it.
 
 `courses()` returns Hub's `{"links": ..., "data": [...]}` envelope rather than a
 bare list, so paging information survives the call.
+
+### Document extraction
+
+Hub reads data out of a document (a timesheet, say) according to a profile your
+app supplies: a JSON Schema (draft 2020-12) of the output you want, plus
+optional `instructions` in plain text. Hub knows nothing about timesheets or
+invoices, so checking the content is your app's job.
+
+Extraction needs no credentials from the customer. Switch it on per Account
+with a plain connection; a second active one answers `409 connection_exists`:
+
+```php
+Hub::connections()->create($accountId, 'extraction');
+```
+
+A profile version belongs to your Consumer, not to an Account, so it sends no
+account header. A version is immutable: change the schema or instructions under
+a new version number. Sending the same version again is safe and answers `200`
+instead of `201`; a different schema under an existing version answers `409
+profile_version_conflict`.
+
+```php
+Hub::extraction()->putProfileVersion('timesheet', 1, [
+    'type' => 'object',
+    'properties' => [
+        'employee' => ['type' => 'string'],
+        'days' => ['type' => 'array', 'items' => ['type' => ['string', 'null']]],
+    ],
+    'required' => ['employee'],
+], instructions: 'Dagcodes: ziek, vrij, A, AP.');
+```
+
+Allow `null` on every field that can be blank or unreadable on paper. Without
+it the model guesses a value, or the run fails on schema validation.
+
+Hints, runs and the webhooks are Account-scoped and send `X-Account-Id`, from
+`ResolvesAccountId` or an explicit `accountId:` argument. Hints are plain text
+(up to 4,000 characters) that help the model read; `null` or `''` clears them:
+
+```php
+Hub::extraction()->putHints('Kolom Proj is de projectcode. FK = Fatima Karim.');
+```
+
+A run answers `202` with `{run_id, status}` straight away. The SDK never
+invents an `Idempotency-Key`; derive it from something stable on your side, so
+a retry returns the same `run_id` instead of starting a second run:
+
+```php
+$run = Hub::extraction()->runText('timesheet', 1, $pastedText, idempotencyKey: "timesheet-{$upload->id}");
+
+$run = Hub::extraction()->runFile(
+    'timesheet',
+    1,
+    file_get_contents($path),
+    'weekstaat.pdf',
+    idempotencyKey: "timesheet-{$upload->id}",
+);
+```
+
+`runFile()` accepts PDF, JPEG, PNG, XLSX and CSV, up to 10 MB and 5 PDF pages.
+Hub decides the type from the content, not the extension.
+
+There is no GET on a run. The result arrives only as a webhook, so claim both
+events in your job:
+
+```php
+use Emeq\HubSdk\Webhooks\HubWebhookEnvelope;
+use Emeq\HubSdk\Webhooks\HubWebhookEvent;
+use Emeq\HubSdk\Webhooks\ProcessHubWebhookJob;
+
+class ProcessHubWebhook extends ProcessHubWebhookJob
+{
+    protected function handles(): array
+    {
+        return [
+            HubWebhookEvent::EXTRACTION_RUN_COMPLETED,
+            HubWebhookEvent::EXTRACTION_RUN_FAILED,
+        ];
+    }
+
+    protected function onEvent(HubWebhookEnvelope $envelope, ?string $eventId, ?string $requestId): void
+    {
+        // $envelope->data['run_id'], ['result'] or ['reason']
+    }
+}
+```
+
+`extraction.run.completed` carries `run_id`, `profile`, `version`, `readers`
+and `result`. A PDF, JPEG or PNG is read twice by separate models and adds
+`pages` and `signals`: `differs` (`{pointer, alternatives}` per cell where the
+readings disagree), `rows_only_in_second_read`, and `review` (JSON Pointers into
+`result` that a person should check). `extraction.run.failed` carries `run_id`,
+`profile`, `version` and `reason`. Treat an unknown `reason` as a plain
+failure; the list can grow. After a Hub worker restart a run's webhook can
+arrive twice with the same event id, which the package's deduplication already
+drops.
 
 Every request carries `User-Agent: emeq-hub-sdk/{version} php/{version}
 laravel/{version}` and `X-Emeq-Sdk-Version`, so Hub can tell which consumers run
@@ -729,6 +830,12 @@ never worked — it surfaced only once real responses were captured. Alongside i
 refresh the route coverage in
 [`docs/hub-api-coverage.md`](docs/hub-api-coverage.md) § Refreshing it.
 
+Extraction has its own map too, with the connection create included:
+
+```php
+MockClient::global(HubMock::extraction());
+```
+
 ### Testing inbound webhooks
 
 `Emeq\HubSdk\Testing\FakeHubWebhook` builds a signed envelope, so a consumer
@@ -749,6 +856,8 @@ $this->postJson(
 
 `event()` builds any canonical event; `connectionRevoked()` and
 `salesInvoiceChanged()` are canned shortcuts for the two most-used ones.
+`extractionRunCompleted()` and `extractionRunFailed()` build the two extraction
+webhooks with the `data` shapes from Hub's contract.
 `body()` is the exact raw JSON that gets signed — decode it yourself rather
 than re-encoding, or the signature in `headers()` will not match what you
 post. `data` on the canned factories is illustrative: this package does not

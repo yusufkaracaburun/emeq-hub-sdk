@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.30.0] — 2026-10-09
+
+### Added
+
+- **`Hub::extraction()`, document extraction against your own profiles.** Four
+  methods: `putProfileVersion()` (`PUT /v1/extraction/profiles/{key}/versions/{n}`),
+  `putHints()` (`PUT /v1/extraction/hints`), `runText()` and `runFile()` (both
+  `POST /v1/extraction/runs`). A profile version is Consumer-scoped and sends no
+  account header; hints and runs are Account-scoped and send `X-Account-Id`
+  from `ResolvesAccountId` or an explicit `$accountId`, like `accounting()`.
+  `putProfileVersion()` returns the body on both `201` (created) and `200`
+  (already there, unchanged). Runs answer `202` with `{run_id, status}`; the
+  result only arrives by webhook. The SDK never invents an `Idempotency-Key`.
+  `runFile()` sends `multipart/form-data` with `profile`, `version` and `file`,
+  and takes the file as a string of bytes plus a filename.
+
+- **`Connections::create($accountId, $provider)`** wraps `POST /v1/connections`.
+  It is how a provider without OAuth, such as `extraction`, is switched on for
+  an Account. The provider is a free string.
+
+- **`HubWebhookEvent::EXTRACTION_RUN_COMPLETED` and `EXTRACTION_RUN_FAILED`**
+  (`extraction.run.completed`, `extraction.run.failed`). Before this release
+  both decoded as `UNMAPPED`. Claim them in `handles()`; there is no dedicated
+  event class.
+
+- **Test support.** `HubMock::extraction()` maps the connection create and all
+  four extraction calls, with `extractionProfileVersion()`, `extractionHints()`,
+  `extractionRun()` and `connection()` for single endpoints.
+  `FakeHubWebhook::extractionRunCompleted()` and `extractionRunFailed()` build
+  signed envelopes with the contract's `data` shapes.
+
 ## [0.29.0] — 2026-09-30
 
 ### Added

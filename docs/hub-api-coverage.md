@@ -68,11 +68,11 @@ flags and are left out here until they are actually in use.
 | Area | Endpoints | Wrapped |
 |---|---:|---:|
 | Platform | 1 | 0 |
-| Accounts and connections | 8 | 7 |
+| Accounts and connections | 8 | 8 |
 | Accounting | 13 | 13 |
 | Exact pass-through | 5 | 0 |
 | Billing | 1 | 0 |
-| **Total (in scope)** | **28** | **20** |
+| **Total (in scope)** | **28** | **21** |
 
 Counts exclude the OAuth callbacks (browser redirects, listed below for
 completeness) and `/v1/admin/billing/*` (Emeq-internal, behind `emeq.admin`).
@@ -95,14 +95,13 @@ providers → connect session or OAuth init → read connection state.
 | POST | `/v1/connect-sessions` | `integrations:manage` \| `consumer:manage-accounts` | `connectSessions()->create()` | ✅ |
 | POST | `/v1/oauth/{provider}/init` | `integrations:manage` | `oauth()->init()` | ✅ |
 | POST | `/v1/oauth/exact/init` | `integrations:manage` \| `exact:write` | via `oauth()->init('exact')` | ✅ |
-| POST | `/v1/connections` | — | | ⬜ |
+| POST | `/v1/connections` | — | `connections()->create()` | ✅ |
 | GET | `/v1/connections/{connection}` | — | `connections()->get()` | ✅ |
 | DELETE | `/v1/connections/{connection}` | — | `connections()->delete()` | ✅ |
 | GET | `/v1/oauth/exact/callback` | public | | — |
 
-`POST /v1/connections` is the only lifecycle route without a wrapper. OAuth
-providers do not need it — `init` creates the row itself — so it only matters for
-providers that authenticate with a client key instead.
+OAuth providers do not need `connections()->create()`, because `init` creates
+the row itself. It is for providers without an OAuth flow, such as `extraction`.
 
 ## Accounting
 
@@ -192,8 +191,6 @@ same exception tree a wrapped one does.
 
 1. `GET /v1/billing/subscription` — one endpoint, and the consumer app needs to
    know whether a subscription is active anyway
-2. `POST /v1/connections` — only pays off once a provider without an OAuth flow
-   is connected, so it can wait as long as Exact is the only one
-3. Exact pass-through — deliberately last: anyone who needs these wants
+2. Exact pass-through — deliberately last: anyone who needs these wants
    provider-specific behaviour by definition, and is better served by
    `connector()` than by a wrapper that implies provider neutrality

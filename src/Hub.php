@@ -10,6 +10,7 @@ use Emeq\HubSdk\Resources\Accounting;
 use Emeq\HubSdk\Resources\Accounts;
 use Emeq\HubSdk\Resources\Connections;
 use Emeq\HubSdk\Resources\ConnectSessions;
+use Emeq\HubSdk\Resources\Extraction;
 use Emeq\HubSdk\Resources\Integrations;
 use Emeq\HubSdk\Resources\Itheorie;
 use Emeq\HubSdk\Resources\OAuth;
@@ -59,5 +60,10 @@ class Hub
     public function itheorie(): Itheorie
     {
         return new Itheorie($this->connector);
+    }
+
+    public function extraction(): Extraction
+    {
+        return new Extraction($this->connector, $this->accountIdResolver);
     }
 }

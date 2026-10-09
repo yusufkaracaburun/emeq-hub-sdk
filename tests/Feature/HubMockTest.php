@@ -166,6 +166,10 @@ it('serves each factory from its own fixture, with the captured status', functio
         'itheorie-purchase' => [HubMock::itheoriePurchase(), 200],
         'itheorie-purchase-in-flight' => [HubMock::itheoriePurchaseInFlight(), 409],
         'itheorie-student' => [HubMock::itheorieStudent(), 200],
+        'extraction-profile-version' => [HubMock::extractionProfileVersion(), 201],
+        'extraction-hints' => [HubMock::extractionHints(), 200],
+        'extraction-run' => [HubMock::extractionRun(), 202],
+        'connection' => [HubMock::connection(), 201],
     ];
 
     $served = [];
@@ -210,4 +214,16 @@ it('serves a conflicted purchase as the exception a consumer has to handle', fun
 
     expect(fn () => app(Hub::class)->itheorie()->createPurchase(['course' => 'c-1'], 'order-4711'))
         ->toThrow(PurchaseInFlight::class);
+});
+
+it('answers every extraction call from the captured fixtures', function (): void {
+    MockClient::global(HubMock::extraction());
+
+    $extraction = app(Hub::class)->extraction();
+
+    expect(app(Hub::class)->connections()->create(42, 'extraction'))->toBe(HubMock::fixture('connection'))
+        ->and($extraction->putProfileVersion('timesheet', 1, ['type' => 'object']))->toBe(HubMock::fixture('extraction-profile-version'))
+        ->and($extraction->putHints('FK = Fatima Karim.', ACCOUNT))->toBe(HubMock::fixture('extraction-hints'))
+        ->and($extraction->runText('timesheet', 1, 'Fatima ma 8', 'run-1', ACCOUNT))->toBe(HubMock::fixture('extraction-run'))
+        ->and($extraction->runFile('timesheet', 1, '%PDF-1.7', 'weekstaat.pdf', 'run-2', ACCOUNT))->toBe(HubMock::fixture('extraction-run'));
 });
